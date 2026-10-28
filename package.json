@@ -1,0 +1,61 @@
+{
+	"name": "beans",
+	"displayName": "Beans",
+	"description": "Letter hints on every row of the VS Code sidebars, for Talon.",
+	"version": "0.1.0",
+	"icon": "media/icon.png",
+	"publisher": "david-tejada",
+	"preview": true,
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/david-tejada/beans"
+	},
+	"homepage": "https://github.com/david-tejada/beans#readme",
+	"bugs": {
+		"url": "https://github.com/david-tejada/beans/issues"
+	},
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"talon",
+		"voice",
+		"voice coding",
+		"accessibility",
+		"hints",
+		"explorer"
+	],
+	"engines": {
+		"vscode": "^1.90.0"
+	},
+	"main": "./extension.js",
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"contributes": {
+		"commands": [
+			{
+				"command": "beans.toggle",
+				"title": "Beans: Toggle hints"
+			},
+			{
+				"command": "beans.inject",
+				"title": "Beans: Inject the hint script"
+			},
+			{
+				"command": "beans.relaunch",
+				"title": "Beans: Relaunch with hints"
+			}
+		]
+	},
+	"extensionKind": [
+		"ui"
+	],
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": true
+		},
+		"virtualWorkspaces": true
+	}
+}

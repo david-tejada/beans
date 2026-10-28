@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#efe6d6"/><stop offset="1" stop-color="#dccbb0"/></linearGradient>
+    <radialGradient id="bean" cx="0.35" cy="0.25" r="0.9"><stop offset="0" stop-color="#4e435b"/><stop offset="0.6" stop-color="#2b2730"/><stop offset="1" stop-color="#080709"/></radialGradient>
+    <filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.35"/></filter>
+    <g id="kb" filter="url(#sh)">
+      <path d="M -40 6 C -44 -8 -34 -20 -20 -22 C -6 -24 6 -16 20 -20 C 34 -24 46 -12 42 4 C 38 18 24 24 8 22 C -8 20 -28 22 -40 6 Z" fill="url(#bean)" stroke="#efe6d6" stroke-width="3" paint-order="stroke"/>
+      <ellipse cx="2" cy="-8" rx="5.5" ry="2.3" fill="#d9d2c8" opacity="0.9"/>
+      <path d="M -26 -8 C -22 -14 -16 -17 -8 -17" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" opacity="0.28"/>
+    </g>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#bg)"/>
+  <use href="#kb" transform="translate(66 46) rotate(-20)"/>
+  <use href="#kb" transform="translate(60 84) rotate(0)"/>
+</svg>

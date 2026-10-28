@@ -1,0 +1,6 @@
+*.vsix
+.*
+.*/**
+**/.*
+media/icon.svg
+media/screenshot.png

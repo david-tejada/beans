@@ -1,0 +1,30 @@
+/* The hint, a pill before the item's name with a soft tint of the row's text
+   color: letters in the sidebars, numbers in quick picks. Only those rows,
+   and the views' headers, get the attribute. Every pill is the same width, wide enough for two wide
+   letters like MW, so a single or narrow letter sits centered with more room
+   around it. */
+.monaco-list-row [data-beans-hint]::before,
+.pane-header [data-beans-hint]::before {
+	content: attr(data-beans-hint);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 3em;
+	height: 1.5em;
+	margin-right: 0.6em;
+	border-radius: 999px;
+	background: color-mix(in srgb, currentColor 15%, transparent);
+	font-size: 0.77em;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	line-height: 1;
+	/* Centers the pill on the name's text box. "middle" sits on the
+	   lowercase letters, which puts it about 1.5px low. */
+	vertical-align: text-top;
+	text-transform: uppercase;
+}
+
+body.beans-hidden .monaco-list-row [data-beans-hint]::before,
+body.beans-hidden .pane-header [data-beans-hint]::before {
+	display: none;
+}
