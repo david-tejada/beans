@@ -75,10 +75,10 @@ These take one object, `{ target }`, where a target is `{ items: [{ hint } | { f
 |---|---|---|
 | open T | `beans.open` | Opens files, toggles folders |
 | split T | `beans.split` | Opens files to the side |
-| file delete T | `beans.delete` | Moves to the Trash with the Explorer's own delete and confirmation; Cmd+Z (Ctrl+Z on Windows and Linux) in the Explorer undoes it |
+| file delete T | `beans.delete` | Moves to the Trash with the Explorer's own delete and confirmation; Cmd+Z (Ctrl+Z on Windows and Linux) in the Explorer undoes it. Rows from other views are deleted after Beans asks, into the Trash where there is one; in a remote window, or with `files.enableTrash` off, the question says the delete is for good |
 | file move T to T / to root | `beans.move` (`destination`: a target or `"root"`) | Moves into that folder, or the folder of that file, with the Explorer's cut and paste; Cmd+Z or Ctrl+Z in the Explorer undoes it. Moves to root, and rows from other views, use an edit that can't be undone |
 | file copy path T / file copy local T | `beans.copyPath`, `beans.copyRelativePath` | One path per line |
-| expand T [deep N] | `beans.expand` (`levels`) | Expands folders, N levels deep |
+| expand T [deep N] | `beans.expand` (`levels`) | Expands folders, N levels deep, skipping folders that `files.exclude` hides |
 | collapse T | `beans.collapse` | Collapses folders |
 | parent T | `beans.collapseParent` | Collapses the folder holding each item |
 | select T | `beans.select` | Selects the rows in the Explorer |

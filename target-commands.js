@@ -135,23 +135,43 @@ async function openItems(items, options = {}) {
 /**
  * Moves the items to the Trash. Explorer rows go through the Explorer's own
  * delete, with its confirmation, so Cmd+Z in the Explorer brings them back.
- * Rows from other views are deleted with an edit after Beans asks.
+ * Rows from other views are deleted after Beans asks, and where there's no
+ * Trash the question says the delete is for good.
  */
 async function deleteItems(items) {
 	if (items.every((item) => item.view === "explorer")) {
 		if (await selectItems(items)) await vscode.commands.executeCommand("moveFileToTrash");
 		return;
 	}
-	const names = items.map((item) => path.basename(item.uri.fsPath));
+	const useTrash = items.every(hasTrash);
+	const names = items.map((item) => path.basename(item.uri.path));
+	const what = items.length === 1 ? `"${names[0]}"` : `${items.length} items`;
 	const choice = await vscode.window.showWarningMessage(
-		`Move ${items.length === 1 ? `"${names[0]}"` : `${items.length} items`} to the Trash?`,
+		useTrash ? `Move ${what} to the Trash?` : `Delete ${what} for good? ${noTrashReason(items)}.`,
 		{ modal: true, detail: names.join("\n") },
-		"Move to Trash",
+		useTrash ? "Move to Trash" : "Delete",
 	);
 	if (!choice) return;
-	const edit = new vscode.WorkspaceEdit();
-	for (const item of items) edit.deleteFile(item.uri, { recursive: true, ignoreIfNotExists: true });
-	await vscode.workspace.applyEdit(edit);
+	for (const item of items) {
+		try {
+			// Asking for the Trash where there is none fails instead of deleting.
+			await vscode.workspace.fs.delete(item.uri, { recursive: true, useTrash });
+		} catch (error) {
+			vscode.window.showWarningMessage(`Beans couldn't delete "${path.basename(item.uri.path)}": ${error.message}`);
+		}
+	}
+}
+
+/**
+ * Whether deleting this item can use the Trash. Only the local disk has one,
+ * VS Code's remote servers don't, and files.enableTrash can turn it off.
+ */
+function hasTrash(item) {
+	return item.uri.scheme === "file" && vscode.workspace.getConfiguration("files", item.uri).get("enableTrash", true);
+}
+
+function noTrashReason(items) {
+	return items.some((item) => item.uri.scheme !== "file") ? "Remote files have no Trash" : "files.enableTrash is off";
 }
 
 /**
@@ -201,10 +221,56 @@ async function expandItems(items, levels) {
 async function expandFolder(uri, levels) {
 	await revealThen(uri, "list.expand");
 	if (levels <= 1) return;
+	const isHidden = hiddenByFilesExclude(uri);
 	const entries = await vscode.workspace.fs.readDirectory(uri);
 	for (const [name, type] of entries) {
-		if (type & vscode.FileType.Directory) await expandFolder(vscode.Uri.joinPath(uri, name), levels - 1);
+		if (!(type & vscode.FileType.Directory)) continue;
+		const child = vscode.Uri.joinPath(uri, name);
+		// A hidden folder isn't in the Explorer to expand, and .git alone holds hundreds of them.
+		if (!isHidden(child)) await expandFolder(child, levels - 1);
 	}
+}
+
+/**
+ * A function telling whether files.exclude hides a path from the Explorer,
+ * for the setting that applies to this folder. Like the Explorer, it matches
+ * the patterns against the path relative to the workspace folder.
+ */
+function hiddenByFilesExclude(folder) {
+	const setting = vscode.workspace.getConfiguration("files", folder).get("exclude") ?? {};
+	// A value can also be { when }, which hides a file next to a sibling; that never hides a folder.
+	const patterns = Object.entries(setting)
+		.filter(([, value]) => value === true)
+		.map(([glob]) => globToRegExp(glob))
+		.filter(Boolean);
+	return (uri) => {
+		const relative = vscode.workspace.asRelativePath(uri, false);
+		return patterns.some((pattern) => pattern.test(relative));
+	};
+}
+
+/**
+ * The RegExp for a files.exclude glob, or null for one that can't be read.
+ * "**" spans folders, "*" and "?" stay within one, "{a,b}" is either. Other
+ * glob features aren't needed for folder names and are matched literally.
+ */
+function globToRegExp(glob) {
+	try {
+		return new RegExp(`^${globSource(glob)}$`);
+	} catch {
+		return null;
+	}
+}
+
+function globSource(glob) {
+	return glob.replace(/\*\*\/|\*\*|\*|\?|\{[^}]*\}|[^*?{]+/g, (token) => {
+		if (token === "**/") return "(?:.*/)?";
+		if (token === "**") return ".*";
+		if (token === "*") return "[^/]*";
+		if (token === "?") return "[^/]";
+		if (token.startsWith("{")) return `(?:${token.slice(1, -1).split(",").map(globSource).join("|")})`;
+		return token.replace(/[.+^$()|[\]\\]/g, "\\$&");
+	});
 }
 
 async function collapseItems(items) {
