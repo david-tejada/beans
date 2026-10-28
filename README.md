@@ -51,7 +51,7 @@ The Talon commands are in [beans-talon](https://github.com/david-tejada/beans-ta
 - **Right-click** (`beans.rowPoint`): "righty <letters>" right-clicks a sidebar row or view header, opening its context menu. On macOS, VS Code opens the menu at the real cursor, so a fake event can't place it: `beans.rowPoint` returns where the row is, as fractions of the window's width and height, and Talon moves the mouse there and right-clicks. The mouse stays on the row. The menu is native, so it has no hints: choose an item with the arrow keys, or type the start of its name, then press Enter.
 - **Toggle** (`beans.toggle`): "beans toggle" shows or hides the hints.
 - **Scroll** (`beans.scroll`, takes `"up"`, `"down"`, `"top"` or `"bottom"`, and optionally a hint): "downer", "upper bill", "upper all" (top), "downer all" (bottom), the same words as Rango. It scrolls the open quick pick, else the tallest sidebar list, or the list holding that row.
-- **Inject** (`beans.inject`) runs the hint script again in every window.
+- **Inject** (`beans.inject`) runs the hint script again in every window. Beans also runs it when a command reaches a window that doesn't have the script, and asks you to say the command again.
 - **Relaunch** (`beans.relaunch`) quits VS Code and starts it again with the debug pipe, held by `cdp-relay.js`. The relay gives up after two minutes if the quit is canceled, and is replaced by the next Relaunch.
 
 ### Resize commands

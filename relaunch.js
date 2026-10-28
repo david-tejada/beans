@@ -1,7 +1,7 @@
 const { execFileSync, spawn } = require("child_process");
 const path = require("path");
 const vscode = require("vscode");
-const { PageError } = require("./inject");
+const { PageError, NotInjectedError } = require("./inject");
 const { getUserDataDir, relayFilePath } = require("./relay-connection");
 
 // The relay the last relaunch started, while it still waits for the editor
@@ -92,12 +92,26 @@ function editorFreeEnv() {
 }
 
 /**
- * Reports a failed request to the page. A bug in the page's script is shown
- * as an error; anything else means the page can't be reached.
+ * Reports a failed request to the page. A window without the hint script
+ * gets it injected, a bug in the script is shown as an error, and anything
+ * else means the page can't be reached.
  */
 async function reportError(error) {
-	if (error instanceof PageError) vscode.window.showErrorMessage(`Beans: ${error.message}`);
+	if (error instanceof NotInjectedError) await injectAndAskAgain(error);
+	else if (error instanceof PageError) vscode.window.showErrorMessage(`Beans: ${error.message}`);
 	else await warnUnreachable(error);
+}
+
+/**
+ * Injects the hint script, which the focused window was missing, and asks
+ * for the command again. Injecting is the whole fix, and a voice user can't
+ * easily click a button offering it.
+ */
+async function injectAndAskAgain(error) {
+	// beans.inject reports its own failure, so there's nothing to add then.
+	if (await vscode.commands.executeCommand("beans.inject", { quiet: true })) {
+		vscode.window.showWarningMessage(`Beans: ${error.message}, so it's injected now. Say the command again.`);
+	}
 }
 
 /** Explains that the page can't be reached, and offers to relaunch. */

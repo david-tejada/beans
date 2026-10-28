@@ -6,6 +6,12 @@ const { connectToRelay } = require("./relay-connection");
 /** An exception thrown by the page's own code, as opposed to a failure to reach it. */
 class PageError extends Error {}
 
+/** Thrown when the focused window doesn't have the hint script, so there's nothing to call. */
+class NotInjectedError extends Error {}
+
+// What a page without the hint script answers in place of a call.
+const NOT_INJECTED = "beans:not-injected";
+
 /**
  * Runs media/beans.js and media/beans.css in every VS Code window, through
  * the Chrome DevTools Protocol on VS Code's debug pipe, which the relay holds
@@ -26,9 +32,20 @@ async function injectAll(mediaDir, channelId) {
 }
 
 /**
- * Evaluates an expression in the VS Code window that has focus, the one a
- * Talon command was spoken to, and resolves to its value.
+ * Calls a function of the hint script (window.__beans in media/beans.js) in
+ * the VS Code window that has focus, the one a Talon command was spoken to,
+ * and resolves to its value. Throws NotInjectedError when that window has no
+ * script, for example because it was still being built when Beans injected
+ * on startup, so callers can put that right instead of doing nothing.
  */
+async function callPage(name, ...args) {
+	const call = `window.__beans.${name}(${args.map((arg) => JSON.stringify(arg)).join(", ")})`;
+	const value = await evaluateInFocusedWindow(`window.__beans ? ${call} : ${JSON.stringify(NOT_INJECTED)}`);
+	if (value === NOT_INJECTED) throw new NotInjectedError("this window didn't have the hint script");
+	return value;
+}
+
+/** Evaluates an expression in the focused window and resolves to its value. */
 async function evaluateInFocusedWindow(expression) {
 	return withRelay(async (relay) => {
 		const pages = await workbenchPages(relay);
@@ -69,7 +86,6 @@ function injectionScript(mediaDir, channelId) {
 		// Other editor windows, such as the Process Explorer, have no workbench.
 		if (!document.querySelector(".monaco-workbench")) return false;
 		if (window.__beansVersion === ${JSON.stringify(version)}) return false;
-		window.__beansVersion = ${JSON.stringify(version)};
 		window.__beansChannelId = ${JSON.stringify(channelId)};
 		document.getElementById("beans-style")?.remove();
 		const style = document.createElement("style");
@@ -78,6 +94,8 @@ function injectionScript(mediaDir, channelId) {
 		style.textContent = ${JSON.stringify(css)} + " " + hideChannel;
 		document.head.append(style);
 		${js}
+		// Marked last, so a script that throws is tried again by the next inject.
+		window.__beansVersion = ${JSON.stringify(version)};
 		return true;
 	})()`;
 }
@@ -101,4 +119,4 @@ async function evaluate(relay, page, expression) {
 	}
 }
 
-module.exports = { injectAll, evaluateInFocusedWindow, PageError };
+module.exports = { injectAll, callPage, PageError, NotInjectedError };

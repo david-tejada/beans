@@ -1,6 +1,6 @@
 const path = require("path");
 const vscode = require("vscode");
-const { injectAll, evaluateInFocusedWindow } = require("./inject");
+const { injectAll, callPage } = require("./inject");
 const { setUserDataDir } = require("./relay-connection");
 const { registerTargetCommands } = require("./target-commands");
 const { relaunch, reportError } = require("./relaunch");
@@ -28,7 +28,8 @@ function activate(context) {
 		// request: { target, by } in steps, { target, to } in pixels, or
 		// { target, max: true }. See resize() in media/beans.js.
 		vscode.commands.registerCommand("beans.resize", resize),
-		vscode.commands.registerCommand("beans.inject", () => inject(page, channel, { quiet: false })),
+		// { quiet: true } skips the message saying how many windows got the script.
+		vscode.commands.registerCommand("beans.inject", (options) => inject(page, channel, { quiet: Boolean(options?.quiet) })),
 		vscode.commands.registerCommand("beans.relaunch", relaunch),
 	);
 
@@ -83,7 +84,7 @@ async function rowPoint(letters) {
 	if (!hint) return null;
 	let point;
 	try {
-		point = await evaluateInFocusedWindow(`window.__beans?.rowPoint(${JSON.stringify(hint)})`);
+		point = await callPage("rowPoint", hint);
 	} catch (error) {
 		await reportError(error);
 		return null;
@@ -96,12 +97,11 @@ async function rowPoint(letters) {
 async function resize(request) {
 	let result;
 	try {
-		result = await evaluateInFocusedWindow(`window.__beans?.resize(${JSON.stringify(request)})`);
+		result = await callPage("resize", request);
 	} catch (error) {
 		await reportError(error);
 		return;
 	}
-	if (!result) return;
 	const warn = (message) => vscode.window.showWarningMessage(`Beans: ${message}.`);
 	// VS Code stops a sash at the sizes the views on either side allow.
 	if (result.problem) warn(result.problem);
@@ -110,14 +110,19 @@ async function resize(request) {
 		warn(`the ${result.name} can't get any ${request.by > 0 ? "bigger" : "smaller"}`);
 }
 
-/** Injects the hint script into every window, and explains what to do when that fails. */
+/**
+ * Injects the hint script into every window, and explains what to do when
+ * that fails. Resolves to whether it could.
+ */
 async function inject({ mediaDir, channelId }, channel, { quiet }) {
 	try {
 		const count = await injectAll(mediaDir, channelId);
 		channel.show();
 		if (!quiet) vscode.window.showInformationMessage(`Beans injected its script into ${count} window(s).`);
+		return true;
 	} catch (error) {
 		await reportError(error);
+		return false;
 	}
 }
 

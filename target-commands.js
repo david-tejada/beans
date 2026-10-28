@@ -1,7 +1,7 @@
 const os = require("os");
 const path = require("path");
 const vscode = require("vscode");
-const { evaluateInFocusedWindow } = require("./inject");
+const { callPage } = require("./inject");
 const { reportError } = require("./relaunch");
 
 /**
@@ -62,12 +62,11 @@ async function resolveTarget(target) {
 	if (!target?.items?.length) return null;
 	let result;
 	try {
-		result = await evaluateInFocusedWindow(`window.__beans?.resolve(${JSON.stringify(target)})`);
+		result = await callPage("resolve", target);
 	} catch (error) {
 		await reportError(error);
 		return null;
 	}
-	if (!result) return null;
 	const items = result.items.map((item) => ({ ...item, uri: uriFor(item.path) }));
 	const unplaced = items.filter((item) => !item.uri).map((item) => item.hint);
 	const problems = [];
@@ -234,7 +233,7 @@ async function selectItems(items) {
 	try {
 		await vscode.commands.executeCommand("workbench.files.action.focusFilesExplorer");
 		await vscode.commands.executeCommand("list.clear");
-		selected = await evaluateInFocusedWindow(`window.__beans?.select(${JSON.stringify(wanted)})`);
+		selected = await callPage("select", wanted);
 	} catch (error) {
 		await reportError(error);
 		return false;
