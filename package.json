@@ -1,6 +1,6 @@
 {
 	"name": "beans",
-	"displayName": "Beans",
+	"displayName": "Beans for Talon",
 	"description": "Letter hints on every row of the VS Code sidebars, for Talon.",
 	"version": "0.1.0",
 	"icon": "media/icon.png",
