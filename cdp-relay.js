@@ -12,6 +12,12 @@ const path = require("path");
 const { readMessages } = require("./relay-connection");
 
 const job = JSON.parse(process.argv[2]);
+// Errors go in a log next to the relay file, since the relay has no terminal.
+const LOG_FILE = path.join(path.dirname(job.relayFile), "beans-relay.log");
+
+// When the relay dies, the pipe closes and the editor quits with it, so an
+// error anywhere here is logged and the relay goes on holding the pipe.
+process.on("uncaughtException", (error) => log(error));
 whenExited(job.pid, () => startEditorWithRelay(job));
 
 /**
@@ -53,19 +59,38 @@ function startEditorWithRelay({ command, args, relayFile }) {
 	// Chromium reads the pipe's commands from the 4th stream and writes
 	// replies to the 5th.
 	const editor = spawn(command, args, { stdio: ["ignore", "ignore", "ignore", "pipe", "pipe"], env });
+	// With no editor there's no pipe to hold, so the relay has nothing to do.
+	editor.once("error", (error) => {
+		log(error);
+		process.exit(1);
+	});
+	// The socket and relay file only make sense once the editor is running.
+	editor.once("spawn", () => holdPipe(editor, relayFile));
+}
+
+/** Serves the editor's pipe to Beans until the editor exits, then cleans up and exits. */
+function holdPipe(editor, relayFile) {
 	const toEditor = editor.stdio[3];
 	const fromEditor = editor.stdio[4];
+	// The pipes break when the editor goes; its "exit" takes it from there.
+	toEditor.on("error", () => {});
+	fromEditor.on("error", () => {});
 
 	const token = crypto.randomBytes(32).toString("hex");
 	const { address, socketDir } = listenAddress();
 	const relay = createRelay(toEditor, fromEditor, token);
 	const server = net.createServer(relay.addClient);
+	// Without the socket Beans can't connect, but the editor still runs.
+	server.on("error", (error) => log(error));
 	server.listen(address, () => writeRelayFile(relayFile, { address, token }));
 
 	editor.on("exit", () => {
-		removeRelayFile(relayFile, token);
-		if (socketDir) fs.rmSync(socketDir, { recursive: true, force: true });
-		process.exit();
+		try {
+			removeRelayFile(relayFile, token);
+			if (socketDir) fs.rmSync(socketDir, { recursive: true, force: true });
+		} finally {
+			process.exit();
+		}
 	});
 }
 
@@ -93,8 +118,8 @@ function createRelay(toEditor, fromEditor, token) {
 	const pending = new Map();
 
 	readMessages(fromEditor, (text) => {
-		const message = JSON.parse(text);
-		const request = pending.get(message.id);
+		const message = parseMessage(text);
+		const request = message && pending.get(message.id);
 		if (!request) return;
 		pending.delete(message.id);
 		if (!request.socket.destroyed) request.socket.write(JSON.stringify({ ...message, id: request.id }) + "\0");
@@ -109,7 +134,13 @@ function createRelay(toEditor, fromEditor, token) {
 				if (!trusted) socket.destroy();
 				return;
 			}
-			const message = JSON.parse(text);
+			const message = parseMessage(text);
+			// A client that doesn't speak JSON is dropped, like one without the token.
+			if (!message) {
+				log(new Error("a client sent a message that isn't JSON"));
+				socket.destroy();
+				return;
+			}
 			const id = ++nextId;
 			pending.set(id, { socket, id: message.id });
 			toEditor.write(JSON.stringify({ ...message, id }) + "\0");
@@ -117,6 +148,15 @@ function createRelay(toEditor, fromEditor, token) {
 	}
 
 	return { addClient };
+}
+
+/** The message as an object, or null when the text isn't JSON. */
+function parseMessage(text) {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return null;
+	}
 }
 
 // timingSafeEqual takes as long whatever the text, so timing doesn't reveal
@@ -138,5 +178,12 @@ function writeRelayFile(relayFile, contents) {
 function removeRelayFile(relayFile, token) {
 	try {
 		if (JSON.parse(fs.readFileSync(relayFile, "utf8")).token === token) fs.rmSync(relayFile);
+	} catch {}
+}
+
+/** Appends an error to the relay's log, which only this user can read. Never throws. */
+function log(error) {
+	try {
+		fs.appendFileSync(LOG_FILE, `${new Date().toISOString()} ${error?.stack ?? error}\n`, { mode: 0o600 });
 	} catch {}
 }

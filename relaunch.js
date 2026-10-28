@@ -4,6 +4,12 @@ const vscode = require("vscode");
 const { PageError } = require("./inject");
 const { getUserDataDir, relayFilePath } = require("./relay-connection");
 
+// The relay the last relaunch started, while it still waits for the editor
+// to quit. Canceling the quit at the unsaved-changes dialog leaves it waiting
+// for up to two minutes; once the editor does quit, this extension host is
+// gone with it, so a relay held here is always one that's still waiting.
+let waitingRelay = null;
+
 /**
  * Quits the editor and starts it again with a debug pipe, so Beans can
  * inject its script. The editor can't start itself after it has quit, so the
@@ -21,14 +27,38 @@ async function relaunch() {
 		args: ["--remote-debugging-pipe", `--user-data-dir=${getUserDataDir()}`],
 		relayFile: relayFilePath(),
 	});
+	// Two waiting relays would both start an editor when this one quits, and
+	// the loser's cleanup can remove the winner's relay file.
+	waitingRelay?.kill();
+	try {
+		waitingRelay = await startRelay(job);
+	} catch (error) {
+		vscode.window.showErrorMessage(`Beans couldn't start its relay (${error.message}), so ${vscode.env.appName} stays open.`);
+		return;
+	}
+	await vscode.commands.executeCommand("workbench.action.quit");
+}
+
+/** Starts the relay with this job, detached so it outlives the editor, and resolves once it's running. */
+function startRelay(job) {
 	// process.execPath is the editor's own Electron, which runs plain Node
 	// with ELECTRON_RUN_AS_NODE, as it does for language servers.
-	spawn(process.execPath, [path.join(__dirname, "cdp-relay.js"), job], {
+	const relay = spawn(process.execPath, [path.join(__dirname, "cdp-relay.js"), job], {
 		detached: true,
 		stdio: "ignore",
 		env: { ...editorFreeEnv(), ELECTRON_RUN_AS_NODE: "1" },
-	}).unref();
-	await vscode.commands.executeCommand("workbench.action.quit");
+	});
+	relay.on("exit", () => {
+		if (waitingRelay === relay) waitingRelay = null;
+	});
+	return new Promise((resolve, reject) => {
+		relay.once("spawn", () => {
+			// Once it runs, this process no longer needs to wait for it.
+			relay.unref();
+			resolve(relay);
+		});
+		relay.once("error", reject);
+	});
 }
 
 /**

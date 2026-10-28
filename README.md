@@ -35,7 +35,7 @@ Extensions can't touch VS Code's interface, so Beans works around that. I want y
 
 - **It drives the workbench through VS Code's debug pipe.** VS Code is built on Chromium, which can be started with a private debug pipe (`--remote-debugging-pipe`). Through it, Beans runs its hint script and styles in each VS Code window, using the Chrome DevTools Protocol. It doesn't change any file inside VS Code, so the app's signature and updates stay intact.
 - **Relaunch quits and restarts VS Code.** **Beans: Relaunch with hints** quits VS Code the normal way and starts it again. Unsaved changes come back from the backups VS Code keeps while you edit (tested on macOS); if `files.hotExit` is `"off"`, VS Code asks you to save them first.
-- **A small relay process runs alongside VS Code.** Relaunch starts a detached Node process (run by VS Code's own Electron) that waits for VS Code to quit, starts it again with the debug pipe, and holds the pipe for as long as VS Code runs. It exits when VS Code does. If it's stopped first, VS Code closes too, because the pipe closes. If you cancel the quit, it gives up after two minutes.
+- **A small relay process runs alongside VS Code.** Relaunch starts a detached Node process (run by VS Code's own Electron) that waits for VS Code to quit, starts it again with the debug pipe, and holds the pipe for as long as VS Code runs. It exits when VS Code does. If it's stopped first, VS Code closes too, because the pipe closes, so an error inside the relay is written to `beans-relay.log` in VS Code's user data folder and the relay carries on. If you cancel the quit, it gives up after two minutes, or sooner when you run Relaunch again, which replaces it.
 - **A hidden status bar item carries requests.** When Talon runs a Beans command, the extension writes the request into a status bar item that Beans' styles hide, and the hint script in the page watches its text. Each window has its own status bar, so a request only reaches the focused window.
 - **Only you can reach the relay.** VS Code opens no network port. The relay listens on a local socket in a new folder only your user account can open (a named pipe on Windows), and drops any connection that doesn't first send a random token. It writes the socket's address and the token to `beans-relay.json` in VS Code's user data folder, readable only by you, and removes it when VS Code exits. So other user accounts and sandboxed apps can't connect. Programs running as you could, but they could already control VS Code in other ways, such as by editing an installed extension.
 
@@ -52,7 +52,7 @@ The Talon commands are in [beans-talon](https://github.com/david-tejada/beans-ta
 - **Toggle** (`beans.toggle`): "beans toggle" shows or hides the hints.
 - **Scroll** (`beans.scroll`, takes `"up"`, `"down"`, `"top"` or `"bottom"`, and optionally a hint): "downer", "upper bill", "upper all" (top), "downer all" (bottom), the same words as Rango. It scrolls the open quick pick, else the tallest sidebar list, or the list holding that row.
 - **Inject** (`beans.inject`) runs the hint script again in every window.
-- **Relaunch** (`beans.relaunch`) quits VS Code and starts it again with the debug pipe, held by `cdp-relay.js`. The relay gives up after two minutes if the quit is canceled.
+- **Relaunch** (`beans.relaunch`) quits VS Code and starts it again with the debug pipe, held by `cdp-relay.js`. The relay gives up after two minutes if the quit is canceled, and is replaced by the next Relaunch.
 
 ### Resize commands
 
