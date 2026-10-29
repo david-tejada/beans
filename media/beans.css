@@ -2,16 +2,17 @@
    color: letters in the sidebars, numbers in quick picks. Only those rows,
    and the views' headers, get the attribute. Every pill is the same width, wide enough for two wide
    letters like MW, so a single or narrow letter sits centered with more room
-   around it. */
+   around it. The injected style sets --beans-hint-width and --beans-gap from
+   the beans.hintStyle setting. */
 .monaco-list-row [data-beans-hint]::before,
 .pane-header [data-beans-hint]::before {
 	content: attr(data-beans-hint);
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 3em;
+	width: var(--beans-hint-width, 3em);
 	height: 1.5em;
-	margin-right: 0.6em;
+	margin-right: var(--beans-gap, 6px);
 	border-radius: 999px;
 	background: color-mix(in srgb, currentColor 15%, transparent);
 	font-size: 0.77em;
@@ -22,6 +23,22 @@
 	   lowercase letters, which puts it about 1.5px low. */
 	vertical-align: text-top;
 	text-transform: uppercase;
+}
+
+/* The same gap before the hint, in place of VS Code's own spacing after the
+   icon and the chevron, so hints line up whatever a row carries: a themed file
+   icon (the label's ::before, 6px of padding), an icon from an image or
+   codicon (.monaco-icon-label-iconpath, 6px of margin), a tree chevron (6px of
+   padding) or a view header's chevron (2px of margin). Only rows and headers
+   that carry a hint (the row carries it as well as its name, see beans.js), so
+   with hints hidden the sidebars look as they always do. */
+body:not(.beans-hidden) .monaco-list-row[data-beans-hint] .monaco-icon-label::before,
+body:not(.beans-hidden) .monaco-list-row[data-beans-hint] .monaco-tl-twistie {
+	padding-right: var(--beans-gap, 6px);
+}
+body:not(.beans-hidden) .monaco-list-row[data-beans-hint] .monaco-icon-label-iconpath,
+body:not(.beans-hidden) .pane-header[data-beans-hint] > .codicon:first-of-type {
+	margin-right: var(--beans-gap, 6px);
 }
 
 body.beans-hidden .monaco-list-row [data-beans-hint]::before,

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The `beans.hintStyle` setting: `"compact"` draws narrower hints that sit closer to the icon and the name.
+
 ## 0.1.0
 
 The first release.

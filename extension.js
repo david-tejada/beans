@@ -31,6 +31,10 @@ function activate(context) {
 		// { quiet: true } skips the message saying how many windows got the script.
 		vscode.commands.registerCommand("beans.inject", (options) => inject(page, channel, { quiet: Boolean(options?.quiet) })),
 		vscode.commands.registerCommand("beans.relaunch", relaunch),
+		// A new hint style reaches the windows through a fresh injection.
+		vscode.workspace.onDidChangeConfiguration((event) => {
+			if (event.affectsConfiguration("beans.hintStyle")) inject(page, channel, { quiet: true });
+		}),
 	);
 
 	registerTargetCommands(context);
@@ -116,7 +120,7 @@ async function resize(request) {
  */
 async function inject({ mediaDir, channelId }, channel, { quiet }) {
 	try {
-		const count = await injectAll(mediaDir, channelId);
+		const count = await injectAll(mediaDir, channelId, settings());
 		channel.show();
 		if (!quiet) vscode.window.showInformationMessage(`Beans injected its script into ${count} window(s).`);
 		return true;
@@ -124,6 +128,11 @@ async function inject({ mediaDir, channelId }, channel, { quiet }) {
 		await reportError(error);
 		return false;
 	}
+}
+
+/** The user's settings for the page (see injectAll). */
+function settings() {
+	return { hintStyle: vscode.workspace.getConfiguration("beans").get("hintStyle", "default") };
 }
 
 module.exports = { activate, deactivate };

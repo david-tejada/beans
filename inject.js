@@ -16,12 +16,13 @@ const NOT_INJECTED = "beans:not-injected";
  * Runs media/beans.js and media/beans.css in every VS Code window, through
  * the Chrome DevTools Protocol on VS Code's debug pipe, which the relay holds
  * (cdp-relay.js). Windows that already run this version are left alone.
- * channelId is the DOM id of the status bar item that carries requests.
- * Returns how many windows were injected. A window that fails is skipped,
- * unless every window fails.
+ * channelId is the DOM id of the status bar item that carries requests, and
+ * settings holds the user's settings for the page: { hintStyle }, "default"
+ * or "compact". Returns how many windows were injected. A window that fails is
+ * skipped, unless every window fails.
  */
-async function injectAll(mediaDir, channelId) {
-	const expression = injectionScript(mediaDir, channelId);
+async function injectAll(mediaDir, channelId, settings = {}) {
+	const expression = injectionScript(mediaDir, channelId, settings);
 	return withRelay(async (relay) => {
 		const pages = await workbenchPages(relay);
 		const results = await Promise.allSettled(pages.map((page) => evaluate(relay, page, expression)));
@@ -74,14 +75,22 @@ async function workbenchPages(relay) {
 	return targetInfos.filter((target) => target.type === "page" && target.url.startsWith("vscode-file://"));
 }
 
-// The version is a hash of the files, so editing them and running
-// "Beans: Inject" again replaces the old copy in every window. The channel's
-// id holds the publisher, so the script and the rule hiding the channel get
-// it from here.
-function injectionScript(mediaDir, channelId) {
+// The version is a hash of the files and the settings, so editing the files
+// and running "Beans: Inject" again, or changing a setting, replaces the old
+// copy in every window. The channel's id holds the publisher, so the script
+// and the rule hiding the channel get it from here.
+function injectionScript(mediaDir, channelId, settings) {
 	const js = fs.readFileSync(path.join(mediaDir, "beans.js"), "utf8");
 	const css = fs.readFileSync(path.join(mediaDir, "beans.css"), "utf8");
-	const version = crypto.createHash("sha256").update(js).update(css).update(channelId).digest("hex").slice(0, 12);
+	const settingsRule = hintStyleRule(settings.hintStyle);
+	const version = crypto
+		.createHash("sha256")
+		.update(js)
+		.update(css)
+		.update(channelId)
+		.update(settingsRule)
+		.digest("hex")
+		.slice(0, 12);
 	return `(() => {
 		// Other editor windows, such as the Process Explorer, have no workbench.
 		if (!document.querySelector(".monaco-workbench")) return false;
@@ -91,13 +100,27 @@ function injectionScript(mediaDir, channelId) {
 		const style = document.createElement("style");
 		style.id = "beans-style";
 		const hideChannel = "#" + CSS.escape(window.__beansChannelId) + " { display: none !important; }";
-		style.textContent = ${JSON.stringify(css)} + " " + hideChannel;
+		style.textContent = ${JSON.stringify(css)} + " " + hideChannel + " " + ${JSON.stringify(settingsRule)};
 		document.head.append(style);
 		${js}
 		// Marked last, so a script that throws is tried again by the next inject.
 		window.__beansVersion = ${JSON.stringify(version)};
 		return true;
 	})()`;
+}
+
+// How wide a hint pill is, and the space on each side of it: between the
+// icon or chevron and the pill, and between the pill and the name. "default"
+// keeps the 6px VS Code has after an icon.
+const HINT_STYLES = {
+	default: { width: "3em", gap: "6px" },
+	compact: { width: "2.5em", gap: "1px" },
+};
+
+function hintStyleRule(hintStyle) {
+	// A settings.json can hold any string, so only the styles' own names count.
+	const { width, gap } = Object.hasOwn(HINT_STYLES, hintStyle) ? HINT_STYLES[hintStyle] : HINT_STYLES.default;
+	return `:root { --beans-hint-width: ${width}; --beans-gap: ${gap}; }`;
 }
 
 /**

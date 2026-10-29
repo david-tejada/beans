@@ -47,7 +47,26 @@
 				"command": "beans.relaunch",
 				"title": "Beans: Relaunch with hints"
 			}
-		]
+		],
+		"configuration": {
+			"title": "Beans",
+			"properties": {
+				"beans.hintStyle": {
+					"type": "string",
+					"scope": "application",
+					"default": "default",
+					"enum": [
+						"default",
+						"compact"
+					],
+					"enumDescriptions": [
+						"A pill with room for two letters, and VS Code's own space after the icon.",
+						"A narrower pill, close to the icon and the name."
+					],
+					"description": "How the hints look."
+				}
+			}
+		}
 	},
 	"extensionKind": [
 		"ui"

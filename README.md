@@ -90,6 +90,10 @@ These take one object, `{ target }`, where a target is `{ items: [{ hint } | { f
 | file create T / folder new T | `beans.newFile`, `beans.newFolder` | VS Code's new file or folder box, inside that folder or next to that file |
 | find in T [text] | `beans.findInFolder` | Searches in that folder |
 
+## Settings
+
+- **`beans.hintStyle`**: `"default"` draws a pill with room for two letters and VS Code's own space after the icon; `"compact"` draws a narrower pill close to the icon and the name. A change shows at once in every window.
+
 ## Development
 
 Beans has two halves:
