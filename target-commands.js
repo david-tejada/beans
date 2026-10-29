@@ -89,9 +89,21 @@ function hintList(hints) {
 function uriFor(fullPath) {
 	const folders = vscode.workspace.workspaceFolders ?? [];
 	const resolved = fullPath.startsWith("~") ? withHome(fullPath.slice(1), folders) : fullPath;
-	const folder = resolved && folders.find((f) => isWithin(resolved, f.uri.fsPath));
-	if (folder) return folder.uri.with({ path: vscode.Uri.file(resolved).path });
-	return vscode.env.remoteName || !resolved ? null : vscode.Uri.file(resolved);
+	if (!resolved) return null;
+	const uriPath = toUriPath(resolved);
+	const folder = folders.find((f) => isWithin(uriPath, f.uri.path));
+	if (folder) return folder.uri.with({ path: uriPath });
+	return vscode.env.remoteName ? null : vscode.Uri.file(resolved);
+}
+
+/**
+ * A path in the form of a URI's path: "/" between segments and a leading "/",
+ * so "C:\me\a.js" becomes "/C:/me/a.js". The hover writes a path the way the
+ * OS holding the file does, which in a remote window isn't this one, so it
+ * can't be compared to a folder's fsPath, which uses this OS's separator.
+ */
+function toUriPath(fullPath) {
+	return /^[a-zA-Z]:[\\/]/.test(fullPath) ? `/${fullPath.replace(/\\/g, "/")}` : fullPath;
 }
 
 /**
@@ -115,9 +127,21 @@ function withHome(rest, folders) {
 	return null;
 }
 
-/** Whether a path is the folder or inside it, on whole path segments: /a/foo isn't in /a/fo. */
-function isWithin(fullPath, folderPath) {
-	return fullPath === folderPath || fullPath.startsWith(folderPath.endsWith(path.sep) ? folderPath : folderPath + path.sep);
+/**
+ * Whether a URI path is the folder or inside it, on whole path segments:
+ * /a/foo isn't in /a/fo. Windows paths are compared without case, as Windows
+ * does: the hover writes the drive letter in upper case whatever case the
+ * folder's URI has.
+ */
+function isWithin(uriPath, folderPath) {
+	const ignoreCase = isWindowsPath(folderPath);
+	const [candidate, folder] = ignoreCase ? [uriPath.toLowerCase(), folderPath.toLowerCase()] : [uriPath, folderPath];
+	const base = folder.endsWith("/") ? folder.slice(0, -1) : folder;
+	return candidate === base || candidate.startsWith(`${base}/`);
+}
+
+function isWindowsPath(uriPath) {
+	return /^\/[a-zA-Z]:(\/|$)/.test(uriPath);
 }
 
 function parentOf(uri) {

@@ -256,7 +256,7 @@
 	}
 
 	/**
-	 * Where to right-click the row with this hint, as fractions of the page's
+	 * Where to right-click the row with this hint, as fractions of the window's
 	 * width and height, or null when there's no such row. On macOS, VS Code
 	 * opens a context menu at the real cursor, not at the event's position,
 	 * so Talon moves the mouse there and clicks. Fractions let Talon place
@@ -266,7 +266,14 @@
 		const row = findRow(hint);
 		if (!row) return null;
 		const { x, y } = labelPoint(row.querySelector(SELECTORS.rowTarget) ?? row);
-		return { x: x / window.innerWidth, y: y / window.innerHeight };
+		// The page sits below the window's title bar when that's the native one
+		// (window.titleBarStyle), so the point is taken from the window's top,
+		// not the page's. The page measures in CSS pixels, which VS Code's zoom
+		// shrinks, the window in the screen's; the page spans the window's
+		// width, which gives the zoom.
+		const zoom = window.outerWidth / window.innerWidth;
+		const pageTop = window.outerHeight - window.innerHeight * zoom;
+		return { x: (x * zoom) / window.outerWidth, y: (pageTop + y * zoom) / window.outerHeight };
 	}
 
 	/** The quick pick row (numbers) or sidebar row (letters) with this hint, logging when there's none. */
