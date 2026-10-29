@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - The `beans.hintStyle` setting: `"compact"` draws narrower hints that sit closer to the icon and the name.
+- Right-click lands on the row when VS Code uses the native title bar, instead of above it.
+- File commands work on the rows of a remote window opened from Windows, which Beans took for files outside the workspace folders.
 
 ## 0.1.0
 
