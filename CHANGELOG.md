@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Expand and collapse work on every row that has an arrow, such as Search files, Outline symbols, Source Control commits and view headers, instead of only on folders. Search files used to expand the file's row in the Explorer, and rows that aren't files were skipped.
+- Expand and collapse leave the keyboard focus where it was (except "expand T deep N", which goes through the Explorer), and collapsing a sticky scroll row no longer selects it or scrolls the tree: the folder stays where its sticky row was.
+
 ## 0.2.0
 
 - The `beans.hintStyle` setting: `"compact"` draws narrower hints that sit closer to the icon and the name.

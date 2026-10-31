@@ -19,6 +19,11 @@
 		stickyRows: ".monaco-tree-sticky-container",
 		stickyRow: ".monaco-tree-sticky-row",
 		rowTarget: ".monaco-tl-contents",
+		// The arrow in front of a tree row that can expand.
+		twistie: ".monaco-tl-twistie",
+		// A toolbar button's class. A click on one inside a sticky scroll row
+		// leaves the tree's scroll, focus and selection alone.
+		actionItemClass: "action-item",
 		// Where a row's name is, in order of preference: file and symbol
 		// labels (Explorer, Search files, Outline, SCM), then Extensions and
 		// SCM group headers, then plain highlighted text.
@@ -102,7 +107,7 @@
 			window.removeEventListener("resize", schedule);
 		};
 		// The extension calls these through the debug port (inject.js).
-		window.__beans = { resolve, select, resize, rowPoint };
+		window.__beans = { resolve, setExpanded, select, resize, rowPoint };
 		schedule();
 		console.log("[beans] loaded");
 	}
@@ -289,10 +294,14 @@
 	 * or collapses the view. With addToSelection, adds it to the selection:
 	 * Cmd+click on macOS, Ctrl+click on Windows and Linux.
 	 */
-	function clickRow(row, { addToSelection = false } = {}) {
+	function clickRow(row, options) {
+		clickElement(row.querySelector(SELECTORS.rowTarget) ?? row, options);
+	}
+
+	/** Clicks an element near the start of its label, like a mouse would. */
+	function clickElement(target, { addToSelection = false } = {}) {
 		// VS Code tells macOS apart the same way.
 		const isMac = navigator.userAgent.includes("Macintosh");
-		const target = row.querySelector(SELECTORS.rowTarget) ?? row;
 		const { x, y } = labelPoint(target);
 		const init = {
 			bubbles: true,
@@ -346,7 +355,9 @@
 	 * events. How far a wheel event moves them depends on the screen's pixel
 	 * ratio and VS Code's settings, and a synthetic event even reads with the
 	 * opposite sign, so this sends one event, measures how far the rows
-	 * moved, and sends a second one for the rest.
+	 * moved, and sends a second one for the rest. Both go out before the
+	 * next paint when the list moves at once, so the rows don't jump twice;
+	 * with smooth scrolling on, the second waits a frame.
 	 */
 	function scrollBy(rows, distance) {
 		const wheel = (deltaY) =>
@@ -356,12 +367,14 @@
 		const before = position();
 		const guess = -distance;
 		wheel(guess);
-		requestAnimationFrame(() => {
+		const finish = () => {
 			const moved = position() - before;
 			const remaining = distance - moved;
 			if (moved === 0 || Math.abs(remaining) < 1) return;
 			wheel(guess * (remaining / moved));
-		});
+		};
+		if (position() !== before) finish();
+		else requestAnimationFrame(finish);
 	}
 
 	function listToScroll(hint) {
@@ -385,31 +398,153 @@
 	 * (skipped), and hints that aren't on screen (missing).
 	 */
 	function resolve(target) {
-		const rows = visibleRows(sidebars());
-		const indexOf = (hint) => rows.findIndex((row) => row.getAttribute(HINT_ATTR) === hint);
-		const chosen = new Set();
-		const missing = [];
-		for (const item of target.items) {
-			const ends = item.hint ? [item.hint, item.hint] : [item.from, item.to];
-			const [start, end] = ends.map(indexOf);
-			if (start === -1 || end === -1) {
-				missing.push(...ends.filter((hint, i) => [start, end][i] === -1));
-				continue;
-			}
-			// A range includes both ends, whichever way round they were said.
-			for (let i = Math.min(start, end); i <= Math.max(start, end); i++) chosen.add(i);
-		}
+		const { rows, missing } = targetRows(target);
 		const items = [];
 		const skipped = [];
-		for (const i of [...chosen].sort((a, b) => a - b)) {
-			const row = rows[i];
+		for (const row of rows) {
 			const hint = row.getAttribute(HINT_ATTR);
 			const path = rowPath(row);
 			if (!path) skipped.push(hint);
 			// Only folder rows can expand.
 			else items.push({ hint, path, isFolder: row.hasAttribute("aria-expanded"), view: viewOf(row) });
 		}
-		return { items, skipped, missing: [...new Set(missing)] };
+		return { items, skipped, missing };
+	}
+
+	/**
+	 * Expands or collapses the rows a target names: any tree row that can,
+	 * such as a folder, a Search file or an Outline symbol, and view headers
+	 * said by their own hint. Rows that can't, such as files, are left alone,
+	 * and so are the headers inside a range. Returns the Explorer
+	 * folders among the rows as { hint, path }, for expanding deeper, and the
+	 * hints that aren't on screen (missing).
+	 */
+	function setExpanded(target, expanded) {
+		const { rows, ends, missing } = targetRows(target);
+		const focused = document.activeElement;
+		// Every row is read before the first click. A click rebuilds the sticky
+		// scroll rows, and a collapse at the end of a list scrolls it back, which
+		// puts other items in these row elements.
+		const folders = [];
+		const toggles = [];
+		for (const row of rows) {
+			const state = row.getAttribute("aria-expanded");
+			if (state === null) continue;
+			const hint = row.getAttribute(HINT_ATTR);
+			if (row.matches(SELECTORS.paneHeader)) {
+				// "collapse C through H" means the rows, not the whole views between them.
+				if (ends.has(hint) && state !== String(expanded)) toggles.push({ row });
+				continue;
+			}
+			const path = rowPath(row);
+			if (path && viewOf(row) === "explorer") folders.push({ hint, path });
+			if (state !== String(expanded)) toggles.push({ row, list: row.closest(SELECTORS.list), index: row.dataset.index });
+		}
+		// Bottom up, since expanding a row rebuilds the rows below it.
+		for (const { row, list, index } of toggles.reverse()) {
+			if (!list) {
+				clickElement(row);
+				continue;
+			}
+			const current = rowAtIndex(row, list, index);
+			// Clicking a row's label opens it in most views; its arrow only expands or collapses it.
+			const twistie = current?.querySelector(SELECTORS.twistie);
+			if (!twistie || current.getAttribute("aria-expanded") === String(expanded)) continue;
+			if (current.matches(SELECTORS.stickyRow)) clickStickyTwistie(current, twistie);
+			else clickElement(twistie);
+		}
+		// A click in a list focuses it. Focus goes back, so you can go on typing in the editor.
+		if (focused instanceof HTMLElement && focused !== document.body && document.activeElement !== focused) focused.focus();
+		return { folders, missing };
+	}
+
+	/**
+	 * The element that shows the list's item at this index: the row itself
+	 * while it still does, else whichever rendered row does, preferring a
+	 * list row to its sticky scroll copy. Null when the item isn't rendered.
+	 */
+	function rowAtIndex(row, list, index) {
+		if (row.isConnected && row.dataset.index === index) return row;
+		const showing = [...list.querySelectorAll(`${SELECTORS.row}[data-index="${index}"]`)];
+		return showing.find((element) => !element.matches(SELECTORS.stickyRow)) ?? showing[0] ?? null;
+	}
+
+	/**
+	 * Clicks a sticky scroll row's arrow, which collapses it, without what
+	 * VS Code does on any click on a sticky row: scroll its folder into
+	 * place, focus the tree and select the folder. VS Code skips that for a
+	 * click on a toolbar button, so the arrow passes for one during the
+	 * click. Then Beans scrolls the folder to where its sticky row was, before
+	 * VS Code paints, as its own click does, so the tree doesn't jump.
+	 */
+	function clickStickyTwistie(row, twistie) {
+		const rows = row.closest(SELECTORS.list)?.querySelector(SELECTORS.listRows);
+		// A sticky row is a copy of a list row, and keeps its index.
+		const index = Number(row.dataset.index);
+		const { top } = row.getBoundingClientRect();
+		twistie.classList.add(SELECTORS.actionItemClass);
+		try {
+			clickElement(twistie);
+		} finally {
+			twistie.classList.remove(SELECTORS.actionItemClass);
+		}
+		if (rows && !Number.isNaN(index)) placeRow(rows, index, top);
+	}
+
+	/**
+	 * Scrolls a list so the row at this index sits at this page y, as near
+	 * as the list can scroll. The list only renders the rows on screen, and
+	 * rows can differ in height (Source Control's commit box is taller), so
+	 * this scrolls by an estimate until the row is rendered, then by what's
+	 * left, measured. A list renders as it scrolls, so it's all done before
+	 * the next paint.
+	 */
+	function placeRow(rows, index, top) {
+		const position = () => -parseFloat(rows.style.top || "0");
+		for (let attempt = 0; attempt < 5; attempt++) {
+			const rendered = [...rows.querySelectorAll(`:scope > ${SELECTORS.row}`)];
+			const row = rendered.find((element) => Number(element.dataset.index) === index);
+			let distance;
+			if (row) distance = row.getBoundingClientRect().top - top;
+			else {
+				// Estimate from the rendered row nearest in index, as if the rows between were as tall as it.
+				const distanceTo = (element) => Math.abs(Number(element.dataset.index) - index);
+				const nearest = rendered.reduce((best, element) => (distanceTo(element) < distanceTo(best) ? element : best), rendered[0]);
+				if (!nearest) return;
+				const box = nearest.getBoundingClientRect();
+				distance = box.top + (index - Number(nearest.dataset.index)) * box.height - top;
+			}
+			if (Math.abs(distance) < 1) return;
+			const before = position();
+			scrollBy(rows, distance);
+			// At the top or bottom of the list, it can't scroll any nearer.
+			if (row || position() === before) return;
+		}
+	}
+
+	/**
+	 * The sidebar rows a target names, in on-screen order, the hints said
+	 * aloud, on their own or as a range's end (ends), and the hints that
+	 * aren't on screen (missing).
+	 */
+	function targetRows(target) {
+		const rows = visibleRows(sidebars());
+		const indexOf = (hint) => rows.findIndex((row) => row.getAttribute(HINT_ATTR) === hint);
+		const chosen = new Set();
+		const ends = new Set();
+		const missing = [];
+		for (const item of target.items) {
+			const said = item.hint ? [item.hint, item.hint] : [item.from, item.to];
+			const [start, end] = said.map(indexOf);
+			if (start === -1 || end === -1) {
+				missing.push(...said.filter((hint, i) => [start, end][i] === -1));
+				continue;
+			}
+			for (const hint of said) ends.add(hint);
+			// A range includes both ends, whichever way round they were said.
+			for (let i = Math.min(start, end); i <= Math.max(start, end); i++) chosen.add(i);
+		}
+		return { rows: [...chosen].sort((a, b) => a - b).map((i) => rows[i]), ends, missing: [...new Set(missing)] };
 	}
 
 	/** The path of the file a row shows, or undefined when it isn't a file. */

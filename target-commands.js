@@ -19,8 +19,8 @@ function registerTargetCommands(context) {
 		"beans.copyPath": (args) => withItems(args, (items) => copyPaths(items, (uri) => uri.fsPath)),
 		"beans.copyRelativePath": (args) =>
 			withItems(args, (items) => copyPaths(items, (uri) => vscode.workspace.asRelativePath(uri, false))),
-		"beans.expand": (args) => withItems(args, (items) => expandItems(items, args.levels ?? 1)),
-		"beans.collapse": (args) => withItems(args, collapseItems),
+		"beans.expand": (args) => expandTarget(args?.target, args?.levels ?? 1),
+		"beans.collapse": (args) => collapseTarget(args?.target),
 		"beans.collapseParent": (args) => withItems(args, collapseParents),
 		"beans.select": (args) => withItems(args, selectItems),
 		"beans.revealInFinder": (args) => withItems(args, revealInFinder),
@@ -73,8 +73,12 @@ async function resolveTarget(target) {
 	if (result.missing.length) problems.push(`no row with hint ${hintList(result.missing)}`);
 	if (result.skipped.length) problems.push(`skipped ${hintList(result.skipped)}, not files`);
 	if (unplaced.length) problems.push(`skipped ${hintList(unplaced)}, outside the workspace folders`);
-	if (problems.length) vscode.window.showWarningMessage(`Beans: ${problems.join("; ")}.`);
+	warnAbout(problems);
 	return items.filter((item) => item.uri);
+}
+
+function warnAbout(problems) {
+	if (problems.length) vscode.window.showWarningMessage(`Beans: ${problems.join("; ")}.`);
 }
 
 function hintList(hints) {
@@ -237,21 +241,47 @@ async function copyPaths(items, format) {
 	await vscode.env.clipboard.writeText(items.map((item) => format(item.uri)).join("\n"));
 }
 
-/** Expands folders, and their subfolders down to this many levels. */
-async function expandItems(items, levels) {
-	for (const item of items.filter((i) => i.isFolder)) await expandFolder(item.uri, levels);
+/** Expands the target's rows, and the subfolders of its Explorer folders down to this many levels. */
+async function expandTarget(target, levels) {
+	const folders = await setExpanded(target, true);
+	if (levels <= 1) return;
+	for (const uri of folders ?? []) await expandSubfolders(uri, levels - 1);
 }
 
-async function expandFolder(uri, levels) {
-	await revealThen(uri, "list.expand");
-	if (levels <= 1) return;
+/** Collapses the target's rows. */
+async function collapseTarget(target) {
+	await setExpanded(target, false);
+}
+
+/**
+ * Expands or collapses the rows the target names, in any view: folders,
+ * Search files, Outline symbols, view headers. The page clicks their arrows,
+ * since not every row that expands is a file. Returns the URIs of the
+ * Explorer folders among them, or null when the page can't be reached.
+ */
+async function setExpanded(target, expanded) {
+	if (!target?.items?.length) return null;
+	let result;
+	try {
+		result = await callPage("setExpanded", target, expanded);
+	} catch (error) {
+		await reportError(error);
+		return null;
+	}
+	if (result.missing.length) warnAbout([`no row with hint ${hintList(result.missing)}`]);
+	return result.folders.map((folder) => uriFor(folder.path)).filter(Boolean);
+}
+
+async function expandSubfolders(uri, levels) {
 	const isHidden = hiddenByFilesExclude(uri);
 	const entries = await vscode.workspace.fs.readDirectory(uri);
 	for (const [name, type] of entries) {
 		if (!(type & vscode.FileType.Directory)) continue;
 		const child = vscode.Uri.joinPath(uri, name);
 		// A hidden folder isn't in the Explorer to expand, and .git alone holds hundreds of them.
-		if (!isHidden(child)) await expandFolder(child, levels - 1);
+		if (isHidden(child)) continue;
+		await revealThen(child, "list.expand");
+		if (levels > 1) await expandSubfolders(child, levels - 1);
 	}
 }
 
@@ -295,10 +325,6 @@ function globSource(glob) {
 		if (token.startsWith("{")) return `(?:${token.slice(1, -1).split(",").map(globSource).join("|")})`;
 		return token.replace(/[.+^$()|[\]\\]/g, "\\$&");
 	});
-}
-
-async function collapseItems(items) {
-	for (const item of items.filter((i) => i.isFolder)) await revealThen(item.uri, "list.collapse");
 }
 
 /** Collapses the folder holding each item, once per folder, but never the workspace folder itself. */
