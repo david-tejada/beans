@@ -128,5 +128,5 @@ The dev window and your everyday VS Code both answer Talon through command-serve
 ### Contributing
 
 - Every change goes through a pull request; `main` only takes squash merges. CI runs the checks and the tests, and keeps the packaged `.vsix` as an artifact, so a change can be tried in VS Code before it's merged.
-- A release is a pull request that bumps `version` in `package.json` and moves the "Unreleased" entries in `CHANGELOG.md` under that version. Once it's merged, CI publishes the extension to the Marketplace and Open VSX and makes the GitHub release.
+- A release is a pull request that bumps `version` in `package.json` and moves the "Unreleased" entries in `CHANGELOG.md` under that version; CI fails the pull request if that section is missing. Once it's merged, CI publishes the extension to the Marketplace and Open VSX and makes the GitHub release, with that section as its notes. A merge that doesn't bump the version releases nothing.
 - `beans-talon/` holds the Talon commands; it's mirrored to the [beans-talon](https://github.com/david-tejada/beans-talon) repo on every merge, so changes to it go through this repo too.

@@ -12,8 +12,9 @@
 		"isolatedModules": true,
 		"types": ["node", "vscode"],
 		"skipLibCheck": true,
-		"noEmit": true
+		"noEmit": true,
+		"allowImportingTsExtensions": true
 	},
-	"include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "vite.config.ts"],
+	"include": ["src/**/*.ts", "scripts/**/*.mts", "test/**/*.ts", "vite.config.ts"],
 	"exclude": ["src/page/**", "node_modules", "dist"]
 }

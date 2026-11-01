@@ -27,6 +27,13 @@ jobs:
         run: pnpm exec vp check
       - name: Unit tests
         run: pnpm exec vp test --run
+      - name: A version bump brings its CHANGELOG section
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "$GITHUB_BASE_REF"
+          if [ "$(git show FETCH_HEAD:package.json | jq -r .version)" != "$(jq -r .version package.json)" ]; then
+            node scripts/release-notes.mts > /dev/null
+          fi
       - name: Package
         run: pnpm package
       - name: Keep the .vsix, to try this change in VS Code
