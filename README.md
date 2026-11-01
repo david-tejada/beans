@@ -45,7 +45,7 @@ Beans is tested on macOS with VS Code. Windows and Linux, and forks of VS Code s
 
 ## Commands
 
-The Talon commands are in [beans-talon](https://github.com/david-tejada/beans-talon): the words in `beans.talon`, the target grammar in `beans.py`. The commands below that aren't in the Command Palette are meant to be called by Talon, through command-server.
+The Talon commands are in [`beans-talon/`](beans-talon), mirrored to the [beans-talon](https://github.com/david-tejada/beans-talon) repo that users clone: the words in `beans.talon`, the target grammar in `beans.py`. The commands below that aren't in the Command Palette are meant to be called by Talon, through command-server.
 
 - **Pick** (`beans.pick`): "click <letters>" clicks a sidebar row, "click <number>" a Command Palette row.
 - **Right-click** (`beans.rowPoint`): "righty <letters>" right-clicks a sidebar row or view header, opening its context menu. On macOS, VS Code opens the menu at the real cursor, so a fake event can't place it: `beans.rowPoint` returns where the row is, as fractions of the window's width and height (title bar included, when VS Code uses the native one), and Talon moves the mouse there and right-clicks. The mouse stays on the row. The menu is native, so it has no hints: choose an item with the arrow keys, or type the start of its name, then press Enter.

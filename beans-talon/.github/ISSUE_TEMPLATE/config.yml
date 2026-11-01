@@ -1,0 +1,6 @@
+# This repo is a mirror; "New issue" here offers only the link to Beans.
+blank_issues_enabled: false
+contact_links:
+  - name: Beans issues
+    url: https://github.com/david-tejada/beans/issues/new
+    about: This repo mirrors the beans-talon/ folder of Beans. Please file issues and pull requests there.

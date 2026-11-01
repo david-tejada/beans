@@ -7,6 +7,12 @@ updates:
     groups:
       dev-dependencies:
         patterns: ["*"]
+    ignore:
+      # The extension host is VS Code 1.90's Node 20; newer majors would lie.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # Has to match engines.vscode, so it moves by hand, with it.
+      - dependency-name: "@types/vscode"
   - package-ecosystem: github-actions
     directory: /
     schedule:
