@@ -1,28 +1,42 @@
-const os = require("os");
-const path = require("path");
-const vscode = require("vscode");
-const { callPage } = require("./inject");
-const { reportError } = require("./relaunch");
+import os from "node:os";
+import path from "node:path";
+import * as vscode from "vscode";
+import { globToRegExp } from "./globs";
+import { callPage } from "./inject";
+import { isWithin, toUriPath, withHome } from "./paths";
+import { reportError } from "./relaunch";
+import { isRecord, targetFrom } from "./requests";
+import type { ResolvedItem, Target } from "./shared/types";
+import type { API as GitApi, GitExtension, Repository } from "./types/git";
+
+/** A row the page resolved, placed in the workspace as a URI. */
+interface Item extends ResolvedItem {
+	uri: vscode.Uri;
+}
 
 /**
  * Registers the commands that act on the files and folders that hints
  * point at. Each takes one object: { target }, plus { destination } for
  * move and { levels } for expand. A target is
- * { items: [{ hint } | { from, to }] }, built by beans.py in the beans-talon repo.
+ * { items: [{ hint } | { from, to }] }, built by beans.py in beans-talon.
  */
-function registerTargetCommands(context) {
-	const commands = {
+export function registerTargetCommands(context: vscode.ExtensionContext): void {
+	const commands: Record<string, (args: unknown) => Promise<void>> = {
 		"beans.open": (args) => withItems(args, openItems),
 		"beans.split": (args) => withItems(args, (items) => openItems(items, { viewColumn: vscode.ViewColumn.Beside })),
 		"beans.delete": (args) => withItems(args, deleteItems),
-		"beans.move": (args) => withItems(args, (items) => moveItems(items, args.destination)),
+		"beans.move": (args) => withItems(args, (items) => moveItems(items, destinationFrom(args))),
 		"beans.copyPath": (args) => withItems(args, (items) => copyPaths(items, (uri) => uri.fsPath)),
 		"beans.copyRelativePath": (args) =>
 			withItems(args, (items) => copyPaths(items, (uri) => vscode.workspace.asRelativePath(uri, false))),
-		"beans.expand": (args) => withItems(args, (items) => expandItems(items, args.levels ?? 1)),
-		"beans.collapse": (args) => withItems(args, collapseItems),
+		"beans.expand": (args) => expandTarget(targetFrom(argument(args, "target")), levelsFrom(args)),
+		"beans.collapse": async (args) => {
+			await setExpanded(targetFrom(argument(args, "target")), false);
+		},
 		"beans.collapseParent": (args) => withItems(args, collapseParents),
-		"beans.select": (args) => withItems(args, selectItems),
+		"beans.select": async (args) => {
+			await withItems(args, selectItems);
+		},
 		"beans.revealInFinder": (args) => withItems(args, revealInFinder),
 		"beans.stage": (args) => withItems(args, (items) => runGit(items, (repo, paths) => repo.add(paths))),
 		"beans.unstage": (args) => withItems(args, (items) => runGit(items, (repo, paths) => repo.revert(paths))),
@@ -39,27 +53,43 @@ function registerTargetCommands(context) {
 	}
 }
 
+function argument(args: unknown, name: string): unknown {
+	return isRecord(args) ? args[name] : undefined;
+}
+
+/** "root", a target, or null when the move names no destination. */
+function destinationFrom(args: unknown): "root" | Target | null {
+	const destination = argument(args, "destination");
+	return destination === "root" ? "root" : targetFrom(destination);
+}
+
+function levelsFrom(args: unknown): number {
+	const levels = argument(args, "levels");
+	return typeof levels === "number" && levels >= 1 ? Math.floor(levels) : 1;
+}
+
 /** Resolves args.target in the focused window, and runs action on the file items, if any. */
-async function withItems(args, action) {
-	const items = await resolveTarget(args?.target);
+async function withItems(args: unknown, action: (items: Item[]) => Promise<unknown>): Promise<void> {
+	const items = await resolveTarget(targetFrom(argument(args, "target")));
 	if (items?.length) await action(items);
 }
 
 /** Like withItems, for commands that act on a single item: the first one. */
-async function withItem(args, action) {
-	const items = await resolveTarget(args?.target);
-	if (!items?.length) return;
-	if (items.length > 1) vscode.window.showInformationMessage(`Beans: only ${items[0].hint.toUpperCase()} is used here.`);
-	await action(items[0]);
+async function withItem(args: unknown, action: (item: Item) => Promise<unknown>): Promise<void> {
+	const items = await resolveTarget(targetFrom(argument(args, "target")));
+	const [first] = items ?? [];
+	if (!first) return;
+	if (items!.length > 1) vscode.window.showInformationMessage(`Beans: only ${first.hint.toUpperCase()} is used here.`);
+	await action(first);
 }
 
 /**
- * Asks the page which rows the target names, and returns them as
- * { hint, uri, isFolder, view }. Warns about hints that aren't on screen or
- * aren't files. Returns null when the page can't be reached.
+ * Asks the page which rows the target names, and returns them as items with
+ * URIs. Warns about hints that aren't on screen or aren't files. Returns null
+ * when there's no target or the page can't be reached.
  */
-async function resolveTarget(target) {
-	if (!target?.items?.length) return null;
+async function resolveTarget(target: Target | null): Promise<Item[] | null> {
+	if (!target) return null;
 	let result;
 	try {
 		result = await callPage("resolve", target);
@@ -67,17 +97,26 @@ async function resolveTarget(target) {
 		await reportError(error);
 		return null;
 	}
-	const items = result.items.map((item) => ({ ...item, uri: uriFor(item.path) }));
-	const unplaced = items.filter((item) => !item.uri).map((item) => item.hint);
+	const items: Item[] = [];
+	const unplaced: string[] = [];
+	for (const item of result.items) {
+		const uri = uriFor(item.path);
+		if (uri) items.push({ ...item, uri });
+		else unplaced.push(item.hint);
+	}
 	const problems = [];
 	if (result.missing.length) problems.push(`no row with hint ${hintList(result.missing)}`);
 	if (result.skipped.length) problems.push(`skipped ${hintList(result.skipped)}, not files`);
 	if (unplaced.length) problems.push(`skipped ${hintList(unplaced)}, outside the workspace folders`);
-	if (problems.length) vscode.window.showWarningMessage(`Beans: ${problems.join("; ")}.`);
-	return items.filter((item) => item.uri);
+	warnAbout(problems);
+	return items;
 }
 
-function hintList(hints) {
+function warnAbout(problems: string[]): void {
+	if (problems.length) vscode.window.showWarningMessage(`Beans: ${problems.join("; ")}.`);
+}
+
+function hintList(hints: string[]): string {
 	return hints.map((hint) => hint.toUpperCase()).join(", ");
 }
 
@@ -86,70 +125,29 @@ function hintList(hints) {
  * null in a remote window when the path is outside every workspace folder,
  * since a local file of that name would be the wrong one.
  */
-function uriFor(fullPath) {
+function uriFor(fullPath: string): vscode.Uri | null {
 	const folders = vscode.workspace.workspaceFolders ?? [];
-	const resolved = fullPath.startsWith("~") ? withHome(fullPath.slice(1), folders) : fullPath;
+	const remote = Boolean(vscode.env.remoteName);
+	const resolved = fullPath.startsWith("~")
+		? withHome(
+				fullPath.slice(1),
+				folders.map((folder) => folder.uri.path),
+				remote ? null : os.homedir(),
+			)
+		: fullPath;
 	if (!resolved) return null;
 	const uriPath = toUriPath(resolved);
 	const folder = folders.find((f) => isWithin(uriPath, f.uri.path));
 	if (folder) return folder.uri.with({ path: uriPath });
-	return vscode.env.remoteName ? null : vscode.Uri.file(resolved);
+	return remote ? null : vscode.Uri.file(resolved);
 }
 
-/**
- * A path in the form of a URI's path: "/" between segments and a leading "/",
- * so "C:\me\a.js" becomes "/C:/me/a.js". The hover writes a path the way the
- * OS holding the file does, which in a remote window isn't this one, so it
- * can't be compared to a folder's fsPath, which uses this OS's separator.
- */
-function toUriPath(fullPath) {
-	return /^[a-zA-Z]:[\\/]/.test(fullPath) ? `/${fullPath.replace(/\\/g, "/")}` : fullPath;
-}
-
-/**
- * Puts the home folder in front of the rest of a "~" path. In a remote
- * window that's the remote home, which Beans can't read, so it's worked out
- * from a workspace folder whose path ends with the start of rest: with rest
- * "/proj/a.js" and the folder "/home/me/proj", it's "/home/me". Returns null
- * when no folder fits.
- */
-function withHome(rest, folders) {
-	if (!vscode.env.remoteName) return path.join(os.homedir(), rest);
-	const segments = rest.split("/");
-	for (const folder of folders) {
-		const folderPath = folder.uri.path;
-		// The longest start of rest that the folder's path ends with.
-		for (let count = segments.length; count > 1; count--) {
-			const start = segments.slice(0, count).join("/");
-			if (folderPath.endsWith(start)) return folderPath.slice(0, -start.length) + rest;
-		}
-	}
-	return null;
-}
-
-/**
- * Whether a URI path is the folder or inside it, on whole path segments:
- * /a/foo isn't in /a/fo. Windows paths are compared without case, as Windows
- * does: the hover writes the drive letter in upper case whatever case the
- * folder's URI has.
- */
-function isWithin(uriPath, folderPath) {
-	const ignoreCase = isWindowsPath(folderPath);
-	const [candidate, folder] = ignoreCase ? [uriPath.toLowerCase(), folderPath.toLowerCase()] : [uriPath, folderPath];
-	const base = folder.endsWith("/") ? folder.slice(0, -1) : folder;
-	return candidate === base || candidate.startsWith(`${base}/`);
-}
-
-function isWindowsPath(uriPath) {
-	return /^\/[a-zA-Z]:(\/|$)/.test(uriPath);
-}
-
-function parentOf(uri) {
+function parentOf(uri: vscode.Uri): vscode.Uri {
 	return vscode.Uri.joinPath(uri, "..");
 }
 
 /** Opens files (pinned, not as a preview) and toggles folders open or closed. */
-async function openItems(items, options = {}) {
+async function openItems(items: Item[], options: vscode.TextDocumentShowOptions = {}): Promise<void> {
 	for (const item of items) {
 		if (item.isFolder) await revealThen(item.uri, "list.toggleExpand");
 		else await vscode.commands.executeCommand("vscode.open", item.uri, { preview: false, ...options });
@@ -162,7 +160,7 @@ async function openItems(items, options = {}) {
  * Rows from other views are deleted after Beans asks, and where there's no
  * Trash the question says the delete is for good.
  */
-async function deleteItems(items) {
+async function deleteItems(items: Item[]): Promise<void> {
 	if (items.every((item) => item.view === "explorer")) {
 		if (await selectItems(items)) await vscode.commands.executeCommand("moveFileToTrash");
 		return;
@@ -181,7 +179,8 @@ async function deleteItems(items) {
 			// Asking for the Trash where there is none fails instead of deleting.
 			await vscode.workspace.fs.delete(item.uri, { recursive: true, useTrash });
 		} catch (error) {
-			vscode.window.showWarningMessage(`Beans couldn't delete "${path.basename(item.uri.path)}": ${error.message}`);
+			const message = error instanceof Error ? error.message : String(error);
+			vscode.window.showWarningMessage(`Beans couldn't delete "${path.basename(item.uri.path)}": ${message}`);
 		}
 	}
 }
@@ -190,11 +189,11 @@ async function deleteItems(items) {
  * Whether deleting this item can use the Trash. Only the local disk has one,
  * VS Code's remote servers don't, and files.enableTrash can turn it off.
  */
-function hasTrash(item) {
+function hasTrash(item: Item): boolean {
 	return item.uri.scheme === "file" && vscode.workspace.getConfiguration("files", item.uri).get("enableTrash", true);
 }
 
-function noTrashReason(items) {
+function noTrashReason(items: Item[]): string {
 	return items.some((item) => item.uri.scheme !== "file") ? "Remote files have no Trash" : "files.enableTrash is off";
 }
 
@@ -204,8 +203,8 @@ function noTrashReason(items) {
  * Explorer rows go through the Explorer's own cut and paste, so language
  * servers can update imports and Cmd+Z in the Explorer undoes it.
  */
-async function moveItems(items, destination) {
-	const folder = await destinationFolder(destination, items[0].uri);
+async function moveItems(items: Item[], destination: "root" | Target | null): Promise<void> {
+	const folder = await destinationFolder(destination, items[0]!.uri);
 	if (!folder) return;
 	const toMove = items.filter((item) => parentOf(item.uri).toString() !== folder.toString());
 	if (toMove.length === 0) return;
@@ -226,32 +225,57 @@ async function moveItems(items, destination) {
 	}
 }
 
-async function destinationFolder(destination, firstUri) {
+async function destinationFolder(
+	destination: "root" | Target | null,
+	firstUri: vscode.Uri,
+): Promise<vscode.Uri | null> {
+	if (destination === null) return null;
 	if (destination === "root") return vscode.workspace.getWorkspaceFolder(firstUri)?.uri ?? null;
 	const [target] = (await resolveTarget(destination)) ?? [];
 	if (!target) return null;
 	return target.isFolder ? target.uri : parentOf(target.uri);
 }
 
-async function copyPaths(items, format) {
+async function copyPaths(items: Item[], format: (uri: vscode.Uri) => string): Promise<void> {
 	await vscode.env.clipboard.writeText(items.map((item) => format(item.uri)).join("\n"));
 }
 
-/** Expands folders, and their subfolders down to this many levels. */
-async function expandItems(items, levels) {
-	for (const item of items.filter((i) => i.isFolder)) await expandFolder(item.uri, levels);
+/** Expands the target's rows, and the subfolders of its Explorer folders down to this many levels. */
+async function expandTarget(target: Target | null, levels: number): Promise<void> {
+	const folders = await setExpanded(target, true);
+	if (levels <= 1) return;
+	for (const uri of folders ?? []) await expandSubfolders(uri, levels - 1);
 }
 
-async function expandFolder(uri, levels) {
-	await revealThen(uri, "list.expand");
-	if (levels <= 1) return;
+/**
+ * Expands or collapses the rows the target names, in any view: folders,
+ * Search files, Outline symbols, view headers. The page clicks their arrows,
+ * since not every row that expands is a file. Returns the URIs of the
+ * Explorer folders among them, or null when the page can't be reached.
+ */
+async function setExpanded(target: Target | null, expanded: boolean): Promise<vscode.Uri[] | null> {
+	if (!target) return null;
+	let result;
+	try {
+		result = await callPage("setExpanded", target, expanded);
+	} catch (error) {
+		await reportError(error);
+		return null;
+	}
+	if (result.missing.length) warnAbout([`no row with hint ${hintList(result.missing)}`]);
+	return result.folders.map((folder) => uriFor(folder.path)).filter((uri): uri is vscode.Uri => uri !== null);
+}
+
+async function expandSubfolders(uri: vscode.Uri, levels: number): Promise<void> {
 	const isHidden = hiddenByFilesExclude(uri);
 	const entries = await vscode.workspace.fs.readDirectory(uri);
 	for (const [name, type] of entries) {
 		if (!(type & vscode.FileType.Directory)) continue;
 		const child = vscode.Uri.joinPath(uri, name);
 		// A hidden folder isn't in the Explorer to expand, and .git alone holds hundreds of them.
-		if (!isHidden(child)) await expandFolder(child, levels - 1);
+		if (isHidden(child)) continue;
+		await revealThen(child, "list.expand");
+		if (levels > 1) await expandSubfolders(child, levels - 1);
 	}
 }
 
@@ -260,49 +284,21 @@ async function expandFolder(uri, levels) {
  * for the setting that applies to this folder. Like the Explorer, it matches
  * the patterns against the path relative to the workspace folder.
  */
-function hiddenByFilesExclude(folder) {
-	const setting = vscode.workspace.getConfiguration("files", folder).get("exclude") ?? {};
+function hiddenByFilesExclude(folder: vscode.Uri): (uri: vscode.Uri) => boolean {
+	const setting = vscode.workspace.getConfiguration("files", folder).get<Record<string, unknown>>("exclude") ?? {};
 	// A value can also be { when }, which hides a file next to a sibling; that never hides a folder.
 	const patterns = Object.entries(setting)
 		.filter(([, value]) => value === true)
 		.map(([glob]) => globToRegExp(glob))
-		.filter(Boolean);
+		.filter((pattern): pattern is RegExp => pattern !== null);
 	return (uri) => {
 		const relative = vscode.workspace.asRelativePath(uri, false);
 		return patterns.some((pattern) => pattern.test(relative));
 	};
 }
 
-/**
- * The RegExp for a files.exclude glob, or null for one that can't be read.
- * "**" spans folders, "*" and "?" stay within one, "{a,b}" is either. Other
- * glob features aren't needed for folder names and are matched literally.
- */
-function globToRegExp(glob) {
-	try {
-		return new RegExp(`^${globSource(glob)}$`);
-	} catch {
-		return null;
-	}
-}
-
-function globSource(glob) {
-	return glob.replace(/\*\*\/|\*\*|\*|\?|\{[^}]*\}|[^*?{]+/g, (token) => {
-		if (token === "**/") return "(?:.*/)?";
-		if (token === "**") return ".*";
-		if (token === "*") return "[^/]*";
-		if (token === "?") return "[^/]";
-		if (token.startsWith("{")) return `(?:${token.slice(1, -1).split(",").map(globSource).join("|")})`;
-		return token.replace(/[.+^$()|[\]\\]/g, "\\$&");
-	});
-}
-
-async function collapseItems(items) {
-	for (const item of items.filter((i) => i.isFolder)) await revealThen(item.uri, "list.collapse");
-}
-
 /** Collapses the folder holding each item, once per folder, but never the workspace folder itself. */
-async function collapseParents(items) {
+async function collapseParents(items: Item[]): Promise<void> {
 	const parents = new Map(items.map((item) => [parentOf(item.uri).toString(), parentOf(item.uri)]));
 	for (const parent of parents.values()) {
 		const root = vscode.workspace.getWorkspaceFolder(parent)?.uri;
@@ -317,8 +313,8 @@ async function collapseParents(items) {
  * exactly these items selected: delete and move act on the selection, so
  * they stop when it's anything else, such as after the tree changed.
  */
-async function selectItems(items) {
-	const wanted = items.filter((item) => item.view === "explorer").map(({ hint, path }) => ({ hint, path }));
+async function selectItems(items: Item[]): Promise<boolean> {
+	const wanted = items.filter((item) => item.view === "explorer").map((item) => ({ hint: item.hint, path: item.path }));
 	let selected;
 	try {
 		await vscode.commands.executeCommand("workbench.files.action.focusFilesExplorer");
@@ -328,16 +324,17 @@ async function selectItems(items) {
 		await reportError(error);
 		return false;
 	}
-	const matches = selected?.length === wanted.length && wanted.every((item) => selected.includes(item.path));
-	if (!matches) vscode.window.showWarningMessage("Beans: the Explorer's selection didn't match, so nothing was changed.");
+	const matches = selected.length === wanted.length && wanted.every((item) => selected.includes(item.path));
+	if (!matches)
+		vscode.window.showWarningMessage("Beans: the Explorer's selection didn't match, so nothing was changed.");
 	return matches;
 }
 
-async function revealInFinder(items) {
+async function revealInFinder(items: Item[]): Promise<void> {
 	for (const item of items) await vscode.commands.executeCommand("revealFileInOS", item.uri);
 }
 
-async function discardItems(items) {
+async function discardItems(items: Item[]): Promise<void> {
 	const names = items.map((item) => path.basename(item.uri.fsPath));
 	const choice = await vscode.window.showWarningMessage(
 		`Discard the changes to ${items.length === 1 ? `"${names[0]}"` : `${items.length} files`}? This can't be undone.`,
@@ -347,7 +344,7 @@ async function discardItems(items) {
 	if (choice) await runGit(items, (repo, paths) => repo.clean(paths));
 }
 
-async function diffItems(items) {
+async function diffItems(items: Item[]): Promise<void> {
 	for (const item of items.filter((i) => !i.isFolder)) await vscode.commands.executeCommand("git.openChange", item.uri);
 }
 
@@ -356,14 +353,13 @@ async function diffItems(items) {
  * the Git extension's API. The built-in git.stage and git.unstage commands
  * only accept Source Control's own objects, not paths.
  */
-async function runGit(items, operation) {
-	const extension = vscode.extensions.getExtension("vscode.git");
-	const git = (extension?.isActive ? extension.exports : await extension?.activate())?.getAPI(1);
+async function runGit(items: Item[], operation: (repo: Repository, paths: string[]) => Promise<void>): Promise<void> {
+	const git = await gitApi();
 	if (!git) {
 		vscode.window.showWarningMessage("Beans: the Git extension isn't available.");
 		return;
 	}
-	const byRepository = new Map();
+	const byRepository = new Map<Repository, string[]>();
 	for (const item of items) {
 		const repository = git.getRepository(item.uri);
 		if (!repository) continue;
@@ -372,10 +368,15 @@ async function runGit(items, operation) {
 	for (const [repository, paths] of byRepository) await operation(repository, paths);
 }
 
+async function gitApi(): Promise<GitApi | null> {
+	const extension = vscode.extensions.getExtension<GitExtension>("vscode.git");
+	if (!extension) return null;
+	const exports = extension.isActive ? extension.exports : await extension.activate();
+	return exports.getAPI(1);
+}
+
 /** Selects the item in the Explorer, then runs a command that acts on the Explorer's selection. */
-async function revealThen(uri, command) {
+async function revealThen(uri: vscode.Uri, command: string): Promise<void> {
 	await vscode.commands.executeCommand("revealInExplorer", uri);
 	await vscode.commands.executeCommand(command);
 }
-
-module.exports = { registerTargetCommands };

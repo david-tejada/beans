@@ -41,7 +41,7 @@ Extensions can't touch VS Code's interface, so Beans works around that. I want y
 
 ### Platforms and editors
 
-Beans is tested on macOS with VS Code. Windows and Linux, and forks of VS Code such as VSCodium, should work but haven't been tried. Snap and Flatpak installs on Linux may not restart with **Relaunch with hints**. Forks that change VS Code's interface can rename the CSS classes `media/beans.js` relies on (listed in `SELECTORS` at its top), which hides hints in those views.
+Beans is tested on macOS with VS Code. Windows and Linux, and forks of VS Code such as VSCodium, should work but haven't been tried. Snap and Flatpak installs on Linux may not restart with **Relaunch with hints**. Forks that change VS Code's interface can rename the CSS classes Beans relies on (listed in `src/page/selectors.ts`), which hides hints in those views.
 
 ## Commands
 
@@ -58,37 +58,37 @@ The Talon commands are in [beans-talon](https://github.com/david-tejada/beans-ta
 
 `beans.resize` takes `{ target, by }` (steps, negative to shrink), `{ target, to }` (pixels) or `{ target, max: true }`. The target is `"sidebar"`, `"secondary"` (the secondary sidebar), `"panel"`, or `{ hint }` for the sidebar view holding that row or header. It drags the divider in the page like a mouse would, so VS Code keeps the new size as if you'd dragged it. A step is 60px for a width and 44px (two rows) for a height. A collapsed view is expanded first. When VS Code stops the divider short, because a view is at its smallest or largest, Beans says where it stopped.
 
-| Talon | What it does |
-|---|---|
-| side wider [N] / side narrower [N] | Sidebar width, by N steps (1 if left out) |
-| side width N | Sidebar width, to N pixels |
-| secondary wider / narrower / width | The same for the secondary sidebar |
-| panel taller [N] / panel shorter [N] / panel height N | Height of the bottom panel (width if it's on a side) |
-| view H taller [N] / view H shorter [N] / view H height N | Height of the sidebar view holding hint H |
-| view H max | That view as tall as it can go |
+| Talon                                                    | What it does                                         |
+| -------------------------------------------------------- | ---------------------------------------------------- |
+| side wider [N] / side narrower [N]                       | Sidebar width, by N steps (1 if left out)            |
+| side width N                                             | Sidebar width, to N pixels                           |
+| secondary wider / narrower / width                       | The same for the secondary sidebar                   |
+| panel taller [N] / panel shorter [N] / panel height N    | Height of the bottom panel (width if it's on a side) |
+| view H taller [N] / view H shorter [N] / view H height N | Height of the sidebar view holding hint H            |
+| view H max                                               | That view as tall as it can go                       |
 
 ### Target commands
 
 These take one object, `{ target }`, where a target is `{ items: [{ hint } | { from, to }] }`. In Talon, a target is hints and ranges joined with "and": "harp past ink and made" is H to I, plus M. Ranges include both ends. Rows that aren't files, such as search matches, are skipped with a warning. The extension reads the rows' paths from the page through the debug pipe.
 
-| Talon | Command | What it does |
-|---|---|---|
-| open T | `beans.open` | Opens files, toggles folders |
-| split T | `beans.split` | Opens files to the side |
-| file delete T | `beans.delete` | Moves to the Trash with the Explorer's own delete and confirmation; Cmd+Z (Ctrl+Z on Windows and Linux) in the Explorer undoes it. Rows from other views are deleted after Beans asks, into the Trash where there is one; in a remote window, or with `files.enableTrash` off, the question says the delete is for good |
-| file move T to T / to root | `beans.move` (`destination`: a target or `"root"`) | Moves into that folder, or the folder of that file, with the Explorer's cut and paste; Cmd+Z or Ctrl+Z in the Explorer undoes it. Moves to root, and rows from other views, use an edit that can't be undone |
-| file copy path T / file copy local T | `beans.copyPath`, `beans.copyRelativePath` | One path per line |
-| expand T [deep N] | `beans.expand` (`levels`) | Expands folders, N levels deep, skipping folders that `files.exclude` hides |
-| collapse T | `beans.collapse` | Collapses folders |
-| parent T | `beans.collapseParent` | Collapses the folder holding each item |
-| select T | `beans.select` | Selects the rows in the Explorer |
-| file open folder T | `beans.revealInFinder` | Reveals in Finder, File Explorer, or the Linux file manager |
-| stage T / unstage T | `beans.stage`, `beans.unstage` | Through the Git extension's API |
-| discard T | `beans.discard` | Discards changes after asking; can't be undone |
-| diff T | `beans.diff` | Opens the changes |
-| file rename T | `beans.rename` | VS Code's rename box (first item only) |
-| file create T / folder new T | `beans.newFile`, `beans.newFolder` | VS Code's new file or folder box, inside that folder or next to that file |
-| find in T [text] | `beans.findInFolder` | Searches in that folder |
+| Talon                                | Command                                            | What it does                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| open T                               | `beans.open`                                       | Opens files, toggles folders                                                                                                                                                                                                                                                                                            |
+| split T                              | `beans.split`                                      | Opens files to the side                                                                                                                                                                                                                                                                                                 |
+| file delete T                        | `beans.delete`                                     | Moves to the Trash with the Explorer's own delete and confirmation; Cmd+Z (Ctrl+Z on Windows and Linux) in the Explorer undoes it. Rows from other views are deleted after Beans asks, into the Trash where there is one; in a remote window, or with `files.enableTrash` off, the question says the delete is for good |
+| file move T to T / to root           | `beans.move` (`destination`: a target or `"root"`) | Moves into that folder, or the folder of that file, with the Explorer's cut and paste; Cmd+Z or Ctrl+Z in the Explorer undoes it. Moves to root, and rows from other views, use an edit that can't be undone                                                                                                            |
+| file copy path T / file copy local T | `beans.copyPath`, `beans.copyRelativePath`         | One path per line                                                                                                                                                                                                                                                                                                       |
+| expand T [deep N]                    | `beans.expand` (`levels`)                          | Expands rows in any view, such as folders, Search files, Outline symbols or view headers (a header only when said by its own hint or as a range's end, not from inside a range). Explorer folders go N levels deep, skipping folders that `files.exclude` hides                                                         |
+| collapse T                           | `beans.collapse`                                   | Collapses rows in any view, as expand does                                                                                                                                                                                                                                                                              |
+| parent T                             | `beans.collapseParent`                             | Collapses the folder holding each item                                                                                                                                                                                                                                                                                  |
+| select T                             | `beans.select`                                     | Selects the rows in the Explorer                                                                                                                                                                                                                                                                                        |
+| file open folder T                   | `beans.revealInFinder`                             | Reveals in Finder, File Explorer, or the Linux file manager                                                                                                                                                                                                                                                             |
+| stage T / unstage T                  | `beans.stage`, `beans.unstage`                     | Through the Git extension's API                                                                                                                                                                                                                                                                                         |
+| discard T                            | `beans.discard`                                    | Discards changes after asking; can't be undone                                                                                                                                                                                                                                                                          |
+| diff T                               | `beans.diff`                                       | Opens the changes                                                                                                                                                                                                                                                                                                       |
+| file rename T                        | `beans.rename`                                     | VS Code's rename box (first item only)                                                                                                                                                                                                                                                                                  |
+| file create T / folder new T         | `beans.newFile`, `beans.newFolder`                 | VS Code's new file or folder box, inside that folder or next to that file                                                                                                                                                                                                                                               |
+| find in T [text]                     | `beans.findInFolder`                               | Searches in that folder                                                                                                                                                                                                                                                                                                 |
 
 ## Settings
 
@@ -96,15 +96,37 @@ These take one object, `{ target }`, where a target is `{ items: [{ hint } | { f
 
 ## Development
 
-Beans has two halves:
+Beans has two halves, both TypeScript in `src/`:
 
-- **`media/beans.js` and `media/beans.css` run in the window's page.** They label the visible sidebar rows, including ones half scrolled out of view, `a`…`z`, then `aa`, `ab`…, and click a row when asked.
-- **`extension.js` runs in the extension host.** On startup, `inject.js` runs the page files in every window through the debug pipe, which `cdp-relay.js` holds (`relaunch.js` starts it). `target-commands.js` has the commands that act on files and folders by hint.
+- **`src/page/` runs in the window's page**, bundled into one script with `media/beans.css`. It labels the visible sidebar rows, including ones half scrolled out of view, `a`…`z`, then `aa`, `ab`…, and clicks a row when asked. Every VS Code class name it relies on is in `src/page/selectors.ts`.
+- **The rest runs in the extension host.** On startup, `inject.ts` runs the page files in every window through the debug pipe, which `cdp-relay.ts` holds (`relaunch.ts` starts it). `target-commands.ts` has the commands that act on files and folders by hint.
 
-To run Beans from a checkout, link it into your extensions folder, then reload VS Code:
+The toolchain is [Vite+](https://viteplus.dev) (`vp`), which bundles, formats, lints, type-checks and tests, and [pnpm](https://pnpm.io). Install both, then the dependencies:
 
 ```bash
-ln -s ~/Code/beans ~/.vscode/extensions/david-tejada.beans-0.1.0
+curl -fsSL https://vite.plus | bash
 ```
 
-After editing `media/`, run **Beans: Inject the hint script** to load the new version into every window. Changes to the extension's other files need **Developer: Reload Window**, and changes to `cdp-relay.js` a relaunch.
+```bash
+pnpm install
+```
+
+Then:
+
+| Command       | What it does                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vpr dev`     | Opens a separate VS Code (its own settings and extensions under `.dev/`) running this checkout, with hints working from the start. It rebuilds on every change: the page script is re-injected, and a change to the extension host side reloads the window. `vpr dev <folder>` opens another folder. **Attach to Extension Host** in the Run and Debug view gives you breakpoints. |
+| `vp check`    | Formats, lints and type-checks. `vp check --fix` fixes what it can. The pre-commit hook runs it on the files you commit.                                                                                                                                                                                                                                                           |
+| `vp test`     | Runs the unit tests in `test/`.                                                                                                                                                                                                                                                                                                                                                    |
+| `vp pack`     | Builds `dist/`.                                                                                                                                                                                                                                                                                                                                                                    |
+| `vpr package` | Builds and packages the `.vsix`.                                                                                                                                                                                                                                                                                                                                                   |
+
+Without the global `vp`, every command also works as `pnpm exec vp …` or through the `pnpm` scripts: `pnpm dev`, `pnpm check`, `pnpm test`, `pnpm build`, `pnpm package`.
+
+The dev window and your everyday VS Code both answer Talon through command-server's shared signal folder, so close the everyday one while you try voice commands, or expect both to react.
+
+### Contributing
+
+- Every change goes through a pull request; `main` only takes squash merges. CI runs the checks and the tests, and keeps the packaged `.vsix` as an artifact, so a change can be tried in VS Code before it's merged.
+- A release is a pull request that bumps `version` in `package.json` and moves the "Unreleased" entries in `CHANGELOG.md` under that version. Once it's merged, CI publishes the extension to the Marketplace and Open VSX and makes the GitHub release.
+- `beans-talon/` holds the Talon commands; it's mirrored to the [beans-talon](https://github.com/david-tejada/beans-talon) repo on every merge, so changes to it go through this repo too.

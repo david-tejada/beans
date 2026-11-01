@@ -1,38 +1,45 @@
 {
 	"name": "beans",
 	"displayName": "Beans for Talon",
-	"description": "Letter hints on every row of the VS Code sidebars, for Talon.",
 	"version": "0.2.0",
-	"icon": "media/icon.png",
-	"publisher": "david-tejada",
-	"preview": true,
+	"description": "Letter hints on every row of the VS Code sidebars, for Talon.",
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"accessibility",
+		"explorer",
+		"hints",
+		"talon",
+		"voice",
+		"voice coding"
+	],
+	"homepage": "https://github.com/david-tejada/beans#readme",
+	"bugs": {
+		"url": "https://github.com/david-tejada/beans/issues"
+	},
 	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/david-tejada/beans"
 	},
-	"homepage": "https://github.com/david-tejada/beans#readme",
-	"bugs": {
-		"url": "https://github.com/david-tejada/beans/issues"
+	"publisher": "david-tejada",
+	"main": "./dist/extension.js",
+	"scripts": {
+		"dev": "node scripts/dev.ts",
+		"build": "vp pack",
+		"check": "vp check",
+		"test": "vp test",
+		"package": "vp pack && vsce package --no-dependencies",
+		"prepare": "vp hooks enable"
 	},
-	"categories": [
-		"Other"
-	],
-	"keywords": [
-		"talon",
-		"voice",
-		"voice coding",
-		"accessibility",
-		"hints",
-		"explorer"
-	],
-	"engines": {
-		"vscode": "^1.90.0"
+	"devDependencies": {
+		"@types/node": "^20.19.43",
+		"@types/vscode": "~1.90.0",
+		"@vscode/vsce": "^4.1.0",
+		"typescript": "^7.0.2",
+		"vite-plus": "^1.4.0"
 	},
-	"main": "./extension.js",
-	"activationEvents": [
-		"onStartupFinished"
-	],
 	"contributes": {
 		"commands": [
 			{
@@ -68,9 +75,18 @@
 			}
 		}
 	},
+	"activationEvents": [
+		"onStartupFinished"
+	],
 	"extensionKind": [
 		"ui"
 	],
+	"icon": "media/icon.png",
+	"preview": true,
+	"engines": {
+		"vscode": "^1.90.0"
+	},
+	"packageManager": "pnpm@12.11.2",
 	"capabilities": {
 		"untrustedWorkspaces": {
 			"supported": true
