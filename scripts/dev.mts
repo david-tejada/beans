@@ -233,7 +233,7 @@ async function reloadWindows(): Promise<void> {
 			if (isRecord(message) && typeof message.id === "number") pending.get(message.id)?.(message);
 		}
 	});
-	const send = <T>(method: string, params: object = {}, sessionId?: string) =>
+	const send = <T,>(method: string, params: object = {}, sessionId?: string) =>
 		new Promise<T>((resolve, reject) => {
 			const id = ++nextId;
 			pending.set(id, (message) => {

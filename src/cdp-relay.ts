@@ -1,4 +1,4 @@
-// Runs as plain Node, started by relaunch.ts (or scripts/dev.ts) with a
+// Runs as plain Node, started by relaunch.ts (or scripts/dev.mts) with a
 // RelayJob as its argument. Waits for the editor's main process to exit,
 // starts the editor again with a debug pipe, and relays Chrome DevTools
 // Protocol messages between that pipe and Beans in each window. Exits when

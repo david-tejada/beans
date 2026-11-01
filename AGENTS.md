@@ -20,7 +20,7 @@ A VS Code extension that puts letter hints on sidebar rows for Talon voice contr
 
 ## Trying a change
 
-`pnpm dev` (or `vpr dev`) opens a separate VS Code running this checkout with hints live; a rebuild re-injects the page script and reloads the window for extension-host changes. To see the hints from outside, connect to the relay named in `.dev/user-data/beans-relay.json` (address and token) and evaluate in the page, as `scripts/dev.ts` does to reload. "Relaunch with hints" from an ordinary VS Code is the other path to test when `relaunch.ts` or `cdp-relay.ts` change.
+`pnpm dev` (or `vpr dev`) opens a separate VS Code running this checkout with hints live; a rebuild re-injects the page script and reloads the window for extension-host changes. To see the hints from outside, connect to the relay named in `.dev/user-data/beans-relay.json` (address and token) and evaluate in the page, as `scripts/dev.mts` does to reload. "Relaunch with hints" from an ordinary VS Code is the other path to test when `relaunch.ts` or `cdp-relay.ts` change.
 
 ## Releases and the Talon folder
 
