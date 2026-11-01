@@ -1,0 +1,6 @@
+allowBuilds:
+  "@vscode/vsce-sign": true
+# pnpm settings only; this repo has one package.
+# Don't install a version published less than three days ago, so a hijacked
+# npm package has time to be caught before it reaches us.
+minimumReleaseAge: 4320

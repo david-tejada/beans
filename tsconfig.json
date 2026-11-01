@@ -1,0 +1,19 @@
+{
+	// The extension host side: Node 20 (VS Code 1.90's Electron) plus the
+	// vscode API. The page script has its own config in src/page.
+	"compilerOptions": {
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"target": "ES2022",
+		"lib": ["ES2023"],
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true,
+		"types": ["node", "vscode"],
+		"skipLibCheck": true,
+		"noEmit": true
+	},
+	"include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "vite.config.ts"],
+	"exclude": ["src/page/**", "node_modules", "dist"]
+}

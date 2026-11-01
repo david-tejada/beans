@@ -1,6 +1,9 @@
-*.vsix
-.*
-.*/**
-**/.*
-media/icon.svg
-media/screenshot.png
+# Everything not listed with ! is left out of the .vsix.
+**
+!dist/**
+!media/beans.css
+!media/icon.png
+!package.json
+!README.md
+!CHANGELOG.md
+!LICENSE
