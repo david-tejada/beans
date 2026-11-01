@@ -1,0 +1,53 @@
+name: mirror-talon
+
+# Copies beans-talon/ to the beans-talon repo, which users clone into their
+# Talon user folder: one mirror commit per merge that touches the folder, on
+# top of the mirror's history, so their `git pull` keeps fast-forwarding.
+on:
+  push:
+    branches: [main]
+    paths: [beans-talon/**]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Two quick merges must not race for the mirror's main.
+concurrency: mirror-talon
+
+jobs:
+  mirror:
+    # Forks have no key and no mirror.
+    if: github.repository == 'david-tejada/beans'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: SSH access to the beans-talon repo
+        # A deploy key with write access to that one repo. GitHub's host keys
+        # come from its API over HTTPS, not from trusting the first connection.
+        env:
+          DEPLOY_KEY: ${{ secrets.BEANS_TALON_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -n "$DEPLOY_KEY" ] || { echo "The BEANS_TALON_DEPLOY_KEY secret is missing."; exit 1; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          (umask 077 && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519)
+          gh api meta --jq '.ssh_keys[] | "github.com \(.)"' >> ~/.ssh/known_hosts
+      - name: Sync the folder into the mirror
+        env:
+          MIRROR: git@github.com:david-tejada/beans-talon.git
+        run: |
+          git clone --quiet --depth=1 "$MIRROR" mirror
+          rsync --archive --delete --exclude .git beans-talon/ mirror/
+          cd mirror
+          git add --all
+          if git diff --cached --quiet; then
+            echo "The mirror already matches beans-talon/."
+            exit 0
+          fi
+          git -c user.name="$(git -C .. log -1 --format=%an)" -c user.email="$(git -C .. log -1 --format=%ae)" \
+            commit --quiet --message "Sync from beans@${GITHUB_SHA::7}: $(git -C .. log -1 --format=%s)"
+          # The commit's tree must be the folder's tree, byte for byte.
+          [ "$(git rev-parse 'HEAD^{tree}')" = "$(git -C .. rev-parse HEAD:beans-talon)" ]
+          git push --quiet origin HEAD:main
+          git log -1 --format='Mirrored as %h: %s'
