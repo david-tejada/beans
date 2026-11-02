@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Beans is no longer marked as a preview on the Marketplace and Open VSX.
+
 ## 0.3.0
 
 - The `beans.stableHints` setting gives each row a letter it keeps while its sidebar shows the same view, so scrolling or expanding a folder no longer changes the other rows' letters, and a row that scrolls away has the same letter when it comes back. New rows get two letters once the single letters are taken; switching the sidebar to another view forgets its letters.
