@@ -238,10 +238,28 @@ const SETUPS: Record<EditorKind, Setup> = {
 				await editor.press(showExplorer);
 				return editor.waitFor<boolean>(explorerShown, "the Explorer", 2000).catch(() => false);
 			}, "the Explorer to show");
-			await editor.waitFor(
-				`document.querySelectorAll("#files .theia-TreeNode[data-beans-hint]").length > 0`,
-				"Beans to hint the Explorer",
-			);
+			try {
+				await editor.waitFor(
+					`document.querySelectorAll("#files .theia-TreeNode[data-beans-hint]").length > 0`,
+					"Beans to hint the Explorer",
+				);
+			} catch (error) {
+				// Say what the Explorer shows instead: no folder open, rows without
+				// hints (a renamed class), or nothing.
+				const shown = await editor
+					.evaluate<string>(
+						`JSON.stringify({
+							title: document.title,
+							rows: document.querySelectorAll("#files .theia-TreeNode").length,
+							hinted: document.querySelectorAll("[data-beans-hint]").length,
+							explorer: document.querySelector("#files")?.innerText.slice(0, 300) ?? null,
+						})`,
+					)
+					.catch(() => "nothing: the page didn't answer");
+				throw new Error(`${error instanceof Error ? error.message : String(error)}; the page shows ${shown}`, {
+					cause: error,
+				});
+			}
 		},
 	},
 };
