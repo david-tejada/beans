@@ -23,6 +23,11 @@ const VSCODE = {
 	stickyRows: ".monaco-tree-sticky-container",
 	stickyRow: ".monaco-tree-sticky-row",
 	rowTarget: ".monaco-tl-contents",
+	// What a sidebar shows, such as Explorer or Source Control; its id names
+	// it, like "workbench.view.explorer".
+	viewContainer: ".composite[id]",
+	// A list row's place in its list, which the row itself carries.
+	listIndex: "[data-index]",
 	// The arrow in front of a tree row that can expand. VS Code says whether
 	// a row is collapsed in aria-expanded, so it has no collapsedClass.
 	twistie: ".monaco-tl-twistie",
@@ -95,6 +100,12 @@ const THEIA: typeof VSCODE = {
 	stickyRows: NONE,
 	stickyRow: NONE,
 	rowTarget: ".theia-TreeNodeContent, .monaco-tl-contents",
+	// What a side panel shows, such as Explorer or Source Control; its id
+	// names it, like "explorer-view-container".
+	viewContainer: ".lm-DockPanel-widget[id]",
+	// A tree node's place in a virtualized tree, which the node's wrapper
+	// carries. Trees that aren't virtualized, like Open Editors, have none.
+	listIndex: "[data-index]",
 	// The chevron of a tree node or view header that can expand, and the
 	// class it has while collapsed.
 	twistie: ".theia-ExpansionToggle",

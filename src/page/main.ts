@@ -4,9 +4,10 @@
 import type { WindowPoint } from "../shared/types";
 import { scrollDirectionFrom } from "../requests";
 import { clickRow, labelPoint } from "./click";
-import { letterHint, numberHint } from "./hints";
+import { letterHint, numberHint, stableLetterHints } from "./hints";
 import { resize } from "./resize";
-import { findRow, nameElement, openQuickInput, sidebars, visibleRows } from "./rows";
+import { rowKeys, type RowKey } from "./row-keys";
+import { findRow, nameElement, openQuickInput, rowKeyParts, sidebars, visibleRows } from "./rows";
 import { scroll } from "./scroll";
 import { EDITOR, HIDDEN_CLASS, HINT_ATTR, SELECTORS } from "./selectors";
 import { resolve, select, setExpanded } from "./targets";
@@ -14,6 +15,8 @@ import { resolve, select, setExpanded } from "./targets";
 // The status bar item that carries requests. Its id holds the publisher,
 // so inject.ts sets it.
 const CHANNEL_ID = window.__beansChannelId ?? "";
+// The beans.stableHints setting, which inject.ts sets too.
+const STABLE_HINTS = window.__beansStableHints ?? false;
 
 start();
 
@@ -24,6 +27,7 @@ function start(): void {
 	// that relabels then.
 	let settleUntil = 0;
 	let settleTimer: number | undefined;
+	let memory: StableMemory = { letters: new Map(), rows: new Map() };
 	const update = () => {
 		scheduled = false;
 		lastRequest = readChannel(lastRequest);
@@ -33,7 +37,7 @@ function start(): void {
 			settleTimer = setTimeout(schedule, wait);
 			return;
 		}
-		labelRows();
+		memory = labelRows(memory);
 	};
 	const schedule = () => {
 		if (scheduled) return;
@@ -131,31 +135,49 @@ function runRequest(command: string, arg: string): void {
 	}
 }
 
+/** What stable hints carry from frame to frame: letters by row key, and each row element's key. */
+interface StableMemory {
+	letters: Map<string, string>;
+	rows: Map<HTMLElement, RowKey>;
+}
+
 /**
  * Gives every row that is at least partly visible a hint. Sidebar rows get
  * letters (a…z, then aa, ab…) and an open quick pick gets numbers (1, 2…),
- * so opening the Command Palette doesn't change the sidebar hints.
+ * so opening the Command Palette doesn't change the sidebar hints. With
+ * stable hints, sidebar letters follow their rows instead of going top to
+ * bottom; memory is what the last frame left, and the new one is returned.
  */
-function labelRows(): void {
+function labelRows(memory: StableMemory): StableMemory {
 	const quickInput = openQuickInput();
-	const hinted = new Set<Element>();
-	const groups = [
-		{ containers: sidebars(), hintFor: letterHint },
-		{ containers: quickInput ? [quickInput] : [], hintFor: numberHint },
+	const sidebarRows = visibleRows(sidebars());
+	const quickRows = quickInput ? visibleRows([quickInput]) : [];
+	let next = memory;
+	let letters = sidebarRows.map((_, index) => letterHint(index));
+	if (STABLE_HINTS) {
+		const rows = rowKeys(sidebarRows.map(rowKeyParts), memory.rows);
+		const keys = [...rows.values()].map(({ key }) => key);
+		next = { letters: stableLetterHints(keys, memory.letters), rows };
+		letters = keys.map((key) => next.letters.get(key) ?? "");
+	}
+	const hints: [HTMLElement, string][] = [
+		...sidebarRows.map((row, index): [HTMLElement, string] => [row, letters[index] ?? ""]),
+		...quickRows.map((row, index): [HTMLElement, string] => [row, numberHint(index)]),
 	];
-	for (const { containers, hintFor } of groups) {
-		visibleRows(containers).forEach((row, index) => {
-			const hint = hintFor(index);
-			// The row carries the hint for pick(); its name element shows it.
-			for (const element of [row, nameElement(row)]) {
-				if (element.getAttribute(HINT_ATTR) !== hint) element.setAttribute(HINT_ATTR, hint);
-				hinted.add(element);
-			}
-		});
+	const hinted = new Set<Element>();
+	for (const [row, hint] of hints) {
+		// Past zz's worth of rows, stable hints run out of letters.
+		if (!hint) continue;
+		// The row carries the hint for pick(); its name element shows it.
+		for (const element of [row, nameElement(row)]) {
+			if (element.getAttribute(HINT_ATTR) !== hint) element.setAttribute(HINT_ATTR, hint);
+			hinted.add(element);
+		}
 	}
 	for (const element of document.querySelectorAll(`[${HINT_ATTR}]`)) {
 		if (!hinted.has(element)) element.removeAttribute(HINT_ATTR);
 	}
+	return next;
 }
 
 /** Clicks the row with this hint, as if the user clicked its label. */
