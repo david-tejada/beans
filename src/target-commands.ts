@@ -1,13 +1,35 @@
 import os from "node:os";
 import path from "node:path";
 import * as vscode from "vscode";
+import { currentEditor } from "./editor";
 import { globToRegExp } from "./globs";
 import { callPage } from "./inject";
 import { isWithin, toUriPath, withHome } from "./paths";
 import { reportError } from "./relaunch";
 import { isRecord, targetFrom } from "./requests";
-import type { ResolvedItem, Target } from "./shared/types";
+import type { Editor, ResolvedItem, Target } from "./shared/types";
 import type { API as GitApi, GitExtension, Repository } from "./types/git";
+
+/** The commands that act on the Explorer's selection, which Theia names its own way. */
+const EXPLORER_COMMANDS: Record<
+	Editor,
+	Record<"delete" | "rename" | "newFile" | "newFolder" | "findInFolder", string>
+> = {
+	vscode: {
+		delete: "moveFileToTrash",
+		rename: "renameFile",
+		newFile: "explorer.newFile",
+		newFolder: "explorer.newFolder",
+		findInFolder: "filesExplorer.findInFolder",
+	},
+	theia: {
+		delete: "file.delete",
+		rename: "file.rename",
+		newFile: "file.newFile",
+		newFolder: "file.newFolder",
+		findInFolder: "search-in-workspace.in-folder",
+	},
+};
 
 /** A row the page resolved, placed in the workspace as a URI. */
 interface Item extends ResolvedItem {
@@ -42,11 +64,15 @@ export function registerTargetCommands(context: vscode.ExtensionContext): void {
 		"beans.unstage": (args) => withItems(args, (items) => runGit(items, (repo, paths) => repo.revert(paths))),
 		"beans.discard": (args) => withItems(args, discardItems),
 		"beans.diff": (args) => withItems(args, diffItems),
-		"beans.rename": (args) => withItem(args, (item) => revealThen(item.uri, "renameFile")),
-		"beans.newFile": (args) => withItem(args, (item) => revealThen(item.uri, "explorer.newFile")),
-		"beans.newFolder": (args) => withItem(args, (item) => revealThen(item.uri, "explorer.newFolder")),
+		"beans.rename": (args) => withItem(args, (item) => revealThen(item.uri, EXPLORER_COMMANDS[currentEditor()].rename)),
+		"beans.newFile": (args) =>
+			withItem(args, (item) => revealThen(item.uri, EXPLORER_COMMANDS[currentEditor()].newFile)),
+		"beans.newFolder": (args) =>
+			withItem(args, (item) => revealThen(item.uri, EXPLORER_COMMANDS[currentEditor()].newFolder)),
 		"beans.findInFolder": (args) =>
-			withItem(args, (item) => revealThen(item.isFolder ? item.uri : parentOf(item.uri), "filesExplorer.findInFolder")),
+			withItem(args, (item) =>
+				revealThen(item.isFolder ? item.uri : parentOf(item.uri), EXPLORER_COMMANDS[currentEditor()].findInFolder),
+			),
 	};
 	for (const [id, run] of Object.entries(commands)) {
 		context.subscriptions.push(vscode.commands.registerCommand(id, run));
@@ -148,9 +174,18 @@ function parentOf(uri: vscode.Uri): vscode.Uri {
 
 /** Opens files (pinned, not as a preview) and toggles folders open or closed. */
 async function openItems(items: Item[], options: vscode.TextDocumentShowOptions = {}): Promise<void> {
+	// Theia has no command that toggles a folder, so the page clicks its
+	// arrow, which it finds by hint. Hints are positions, so the folders go
+	// first and bottom up: toggling one moves only the rows below it, and
+	// opening a file adds a row to Open Editors, above them all.
+	if (currentEditor() === "theia") {
+		for (const folder of items.filter((item) => item.isFolder).toReversed()) {
+			await setExpanded({ items: [{ hint: folder.hint }] }, !folder.isExpanded);
+		}
+	}
 	for (const item of items) {
-		if (item.isFolder) await revealThen(item.uri, "list.toggleExpand");
-		else await vscode.commands.executeCommand("vscode.open", item.uri, { preview: false, ...options });
+		if (!item.isFolder) await vscode.commands.executeCommand("vscode.open", item.uri, { preview: false, ...options });
+		else if (currentEditor() === "vscode") await revealThen(item.uri, "list.toggleExpand");
 	}
 }
 
@@ -162,7 +197,7 @@ async function openItems(items: Item[], options: vscode.TextDocumentShowOptions 
  */
 async function deleteItems(items: Item[]): Promise<void> {
 	if (items.every((item) => item.view === "explorer")) {
-		if (await selectItems(items)) await vscode.commands.executeCommand("moveFileToTrash");
+		if (await selectItems(items)) await vscode.commands.executeCommand(EXPLORER_COMMANDS[currentEditor()].delete);
 		return;
 	}
 	const useTrash = items.every(hasTrash);
@@ -208,9 +243,10 @@ async function moveItems(items: Item[], destination: "root" | Target | null): Pr
 	if (!folder) return;
 	const toMove = items.filter((item) => parentOf(item.uri).toString() !== folder.toString());
 	if (toMove.length === 0) return;
-	// The workspace folder isn't a row the Explorer can select and paste into.
+	// The workspace folder isn't a row the Explorer can select and paste into,
+	// and Theia's Explorer has no cut and paste commands.
 	const isRoot = vscode.workspace.getWorkspaceFolder(folder)?.uri.toString() === folder.toString();
-	if (!isRoot && toMove.every((item) => item.view === "explorer")) {
+	if (currentEditor() === "vscode" && !isRoot && toMove.every((item) => item.view === "explorer")) {
 		if (!(await selectItems(toMove))) return;
 		await vscode.commands.executeCommand("filesExplorer.cut");
 		await revealThen(folder, "filesExplorer.paste");
@@ -244,6 +280,11 @@ async function copyPaths(items: Item[], format: (uri: vscode.Uri) => string): Pr
 async function expandTarget(target: Target | null, levels: number): Promise<void> {
 	const folders = await setExpanded(target, true);
 	if (levels <= 1) return;
+	// Theia has no command that expands a folder that isn't on screen.
+	if (currentEditor() === "theia") {
+		warnNotInTheia("expanding more than one level", "expand each folder by its own hint");
+		return;
+	}
 	for (const uri of folders ?? []) await expandSubfolders(uri, levels - 1);
 }
 
@@ -299,6 +340,11 @@ function hiddenByFilesExclude(folder: vscode.Uri): (uri: vscode.Uri) => boolean 
 
 /** Collapses the folder holding each item, once per folder, but never the workspace folder itself. */
 async function collapseParents(items: Item[]): Promise<void> {
+	// Theia has no command that collapses a folder, and the folder may not be on screen.
+	if (currentEditor() === "theia") {
+		warnNotInTheia("collapsing a file's folder", "collapse the folder by its own hint");
+		return;
+	}
 	const parents = new Map(items.map((item) => [parentOf(item.uri).toString(), parentOf(item.uri)]));
 	for (const parent of parents.values()) {
 		const root = vscode.workspace.getWorkspaceFolder(parent)?.uri;
@@ -314,12 +360,20 @@ async function collapseParents(items: Item[]): Promise<void> {
  * they stop when it's anything else, such as after the tree changed.
  */
 async function selectItems(items: Item[]): Promise<boolean> {
-	const wanted = items.filter((item) => item.view === "explorer").map((item) => ({ hint: item.hint, path: item.path }));
+	const explorerItems = items.filter((item) => item.view === "explorer");
+	const wanted = explorerItems.map((item) => ({ hint: item.hint, path: item.path }));
 	let selected;
 	try {
-		await vscode.commands.executeCommand("workbench.files.action.focusFilesExplorer");
-		await vscode.commands.executeCommand("list.clear");
-		selected = await callPage("select", wanted);
+		await focusExplorer();
+		// Theia has no list.clear, but revealing a file selects just that
+		// file, so the page adds the others.
+		if (currentEditor() === "theia" && explorerItems[0]) {
+			await vscode.commands.executeCommand("revealInExplorer", explorerItems[0].uri);
+			selected = await callPage("select", wanted.slice(1), [explorerItems[0].path]);
+		} else {
+			await vscode.commands.executeCommand("list.clear");
+			selected = await callPage("select", wanted);
+		}
 	} catch (error) {
 		await reportError(error);
 		return false;
@@ -328,6 +382,10 @@ async function selectItems(items: Item[]): Promise<boolean> {
 	if (!matches)
 		vscode.window.showWarningMessage("Beans: the Explorer's selection didn't match, so nothing was changed.");
 	return matches;
+}
+
+function warnNotInTheia(what: string, instead: string): void {
+	vscode.window.showWarningMessage(`Beans: ${what} doesn't work in Theia yet; ${instead}.`);
 }
 
 async function revealInFinder(items: Item[]): Promise<void> {
@@ -378,5 +436,17 @@ async function gitApi(): Promise<GitApi | null> {
 /** Selects the item in the Explorer, then runs a command that acts on the Explorer's selection. */
 async function revealThen(uri: vscode.Uri, command: string): Promise<void> {
 	await vscode.commands.executeCommand("revealInExplorer", uri);
+	// Theia's file commands act on what has focus, which revealing leaves in the editor.
+	if (currentEditor() === "theia") await focusExplorer();
 	await vscode.commands.executeCommand(command);
+}
+
+async function focusExplorer(): Promise<void> {
+	try {
+		await vscode.commands.executeCommand("workbench.files.action.focusFilesExplorer");
+	} catch (error) {
+		// Theia focuses the Explorer, then fails to send back what the command
+		// returned: "Error during encoding: 'Maximum call stack size exceeded'".
+		if (currentEditor() !== "theia") throw error;
+	}
 }

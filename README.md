@@ -43,6 +43,8 @@ Extensions can't touch VS Code's interface, so Beans works around that. I want y
 
 Beans is tested on macOS with VS Code. Windows and Linux, and forks of VS Code such as VSCodium, should work but haven't been tried. Snap and Flatpak installs on Linux may not restart with **Relaunch with hints**. Forks that change VS Code's interface can rename the CSS classes Beans relies on (listed in `src/page/selectors.ts`), which hides hints in those views.
 
+Beans also works in the Eclipse Theia IDE desktop app, tested on macOS with Theia IDE 1.76. Theia only borrows VS Code's extension API: its sidebars are its own, so Beans has a second set of class names for them, in the same `src/page/selectors.ts`. Relaunch closes Theia's window, which quits it, and the relay file goes in Theia's configuration folder (`~/.theia-ide`). Most commands work as they do in VS Code. Moving files goes through VS Code's file API rather than the Explorer's cut and paste, so Theia can't undo it. Resizing, expanding more than one level and collapsing a file's folder don't work in Theia yet, and Beans says so when you ask. Theia in a browser can't work, since there's no debug pipe to reach. No automated test runs in Theia, so a Theia release can break hints without anyone noticing.
+
 ## Commands
 
 The Talon commands are in [`beans-talon/`](beans-talon), mirrored to the [beans-talon](https://github.com/david-tejada/beans-talon) repo that users clone: the words in `beans.talon`, the target grammar in `beans.py`. The commands below that aren't in the Command Palette are meant to be called by Talon, through command-server.

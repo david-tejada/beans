@@ -8,7 +8,7 @@ import { letterHint, numberHint } from "./hints";
 import { resize } from "./resize";
 import { findRow, nameElement, openQuickInput, sidebars, visibleRows } from "./rows";
 import { scroll } from "./scroll";
-import { HIDDEN_CLASS, HINT_ATTR, SELECTORS } from "./selectors";
+import { EDITOR, HIDDEN_CLASS, HINT_ATTR, SELECTORS } from "./selectors";
 import { resolve, select, setExpanded } from "./targets";
 
 // The status bar item that carries requests. Its id holds the publisher,
@@ -20,9 +20,19 @@ start();
 function start(): void {
 	let scheduled = false;
 	let lastRequest: string | null = null;
+	// Until when relabeling waits, as a performance.now() time, and the timer
+	// that relabels then.
+	let settleUntil = 0;
+	let settleTimer: number | undefined;
 	const update = () => {
 		scheduled = false;
 		lastRequest = readChannel(lastRequest);
+		const wait = settleUntil - performance.now();
+		if (wait > 0) {
+			clearTimeout(settleTimer);
+			settleTimer = setTimeout(schedule, wait);
+			return;
+		}
 		labelRows();
 	};
 	const schedule = () => {
@@ -35,7 +45,9 @@ function start(): void {
 	// scroll, so style and class changes are what signal "relabel".
 	// Mutations in the editor are ignored to keep typing cheap.
 	const observer = new MutationObserver((records) => {
-		if (records.some(isRelevant)) schedule();
+		if (!records.some(isRelevant)) return;
+		if (records.some(addsSwappedRow)) settleUntil = performance.now() + SETTLE_MS;
+		schedule();
 	});
 	observer.observe(document.documentElement, {
 		childList: true,
@@ -45,17 +57,46 @@ function start(): void {
 		attributeFilter: ["style", "class", "aria-expanded"],
 	});
 	window.addEventListener("resize", schedule);
+	// Theia's trees scroll natively, which changes nothing the observer
+	// sees, so a scroll in a sidebar relabels too. Scroll events don't
+	// bubble, hence the capture.
+	const onScroll = (event: Event) => {
+		if (event.target instanceof Element && event.target.closest(SELECTORS.parts.join(","))) schedule();
+	};
+	if (EDITOR === "theia") document.addEventListener("scroll", onScroll, { capture: true, passive: true });
 
 	// A newer version injected later stops this one first.
 	window.__beansStop?.();
 	window.__beansStop = () => {
 		observer.disconnect();
 		window.removeEventListener("resize", schedule);
+		document.removeEventListener("scroll", onScroll, { capture: true });
+		clearTimeout(settleTimer);
 	};
 	// The extension calls these through the debug pipe (inject.ts).
 	window.__beans = { resolve, setExpanded, select, resize, rowPoint };
 	schedule();
 	console.log("[beans] loaded");
+}
+
+// Theia swaps the preview editor's row in Open Editors in two steps: it adds
+// the new file's row, then removes the old one about 150ms later. Relabeling
+// in between would move every hint below down a letter and back, so a row
+// added there holds relabeling back this long. Requests still run at once.
+const SETTLE_MS = 250;
+
+function addsSwappedRow(record: MutationRecord): boolean {
+	return (
+		EDITOR === "theia" &&
+		record.type === "childList" &&
+		record.target instanceof Element &&
+		record.target.closest(SELECTORS.views.openEditors) !== null &&
+		// A new row, not a changed marker inside one, which would hold
+		// relabeling back on every keystroke.
+		[...record.addedNodes].some(
+			(node) => node instanceof Element && (node.matches(SELECTORS.row) || node.querySelector(SELECTORS.row) !== null),
+		)
+	);
 }
 
 function isRelevant(record: MutationRecord): boolean {

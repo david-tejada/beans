@@ -5,7 +5,11 @@
    around it. The injected style sets --beans-hint-width and --beans-gap from
    the beans.hintSpacing setting; the fallbacks are the default spacing's. */
 .monaco-list-row [data-beans-hint]::before,
-.pane-header [data-beans-hint]::before {
+.pane-header [data-beans-hint]::before,
+.theia-TreeNode [data-beans-hint]::before,
+.scm-history-graph-row [data-beans-hint]::before,
+.scm-history-change-row [data-beans-hint]::before,
+.theia-view-container-part-header [data-beans-hint]::before {
 	content: attr(data-beans-hint);
 	display: inline-flex;
 	align-items: center;
@@ -13,6 +17,9 @@
 	width: var(--beans-hint-width, 2.75em);
 	height: 1.5em;
 	margin-right: var(--beans-gap, 3px);
+	/* A name that lays out its children as a flex row, as Theia's Source
+	   Control rows do, would squeeze the pill when the row's buttons show. */
+	flex-shrink: 0;
 	border-radius: 999px;
 	background: color-mix(in srgb, currentColor 15%, transparent);
 	font-size: 0.77em;
@@ -41,7 +48,14 @@ body:not(.beans-hidden) .pane-header[data-beans-hint] > .codicon:first-of-type {
 	margin-right: var(--beans-gap, 3px);
 }
 
+/* Theia's file icons and chevrons have their own spacing after them, so the
+   pill only needs its gap after it. */
+
 body.beans-hidden .monaco-list-row [data-beans-hint]::before,
-body.beans-hidden .pane-header [data-beans-hint]::before {
+body.beans-hidden .pane-header [data-beans-hint]::before,
+body.beans-hidden .theia-TreeNode [data-beans-hint]::before,
+body.beans-hidden .scm-history-graph-row [data-beans-hint]::before,
+body.beans-hidden .scm-history-change-row [data-beans-hint]::before,
+body.beans-hidden .theia-view-container-part-header [data-beans-hint]::before {
 	display: none;
 }

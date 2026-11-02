@@ -1,6 +1,6 @@
 import type { ResolveResult, SetExpandedResult, Target } from "../shared/types";
-import { clickElement, clickRow } from "./click";
-import { hintOf, rowPath, sidebars, viewOf, visibleRows } from "./rows";
+import { clickElement, clickRow, nextFrame } from "./click";
+import { expandedState, hintOf, rowPath, sidebars, viewOf, visibleRows } from "./rows";
 import { placeRow, rowIndex } from "./scroll";
 import { SELECTORS } from "./selectors";
 
@@ -17,12 +17,18 @@ export function resolve(target: Target): ResolveResult {
 		const path = rowPath(row);
 		if (!path) result.skipped.push(hint);
 		// Only folder rows can expand.
-		else result.items.push({ hint, path, isFolder: row.hasAttribute("aria-expanded"), view: viewOf(row) });
+		else {
+			const state = expandedState(row);
+			result.items.push({ hint, path, isFolder: state !== null, isExpanded: state === true, view: viewOf(row) });
+		}
 	}
 	return result;
 }
 
-/** A row to expand or collapse. A view header has no list; it's clicked where it is. */
+/**
+ * A row to expand or collapse. A view header has no list, and Theia's rows
+ * no index; they're clicked where they are.
+ */
 interface Toggle {
 	row: HTMLElement;
 	list?: HTMLElement;
@@ -46,30 +52,32 @@ export function setExpanded(target: Target, expanded: boolean): SetExpandedResul
 	const folders: SetExpandedResult["folders"] = [];
 	const toggles: Toggle[] = [];
 	for (const row of rows) {
-		const state = row.getAttribute("aria-expanded");
+		const state = expandedState(row);
 		if (state === null) continue;
 		const hint = hintOf(row);
 		if (row.matches(SELECTORS.paneHeader)) {
 			// "collapse C through H" means the rows, not the whole views between them.
-			if (ends.has(hint) && state !== String(expanded)) toggles.push({ row });
+			if (ends.has(hint) && state !== expanded) toggles.push({ row });
 			continue;
 		}
 		const path = rowPath(row);
 		if (path && viewOf(row) === "explorer") folders.push({ hint, path });
-		if (state !== String(expanded)) {
-			toggles.push({ row, list: row.closest<HTMLElement>(SELECTORS.list) ?? undefined, index: rowIndex(row) });
+		if (state !== expanded) {
+			const index = rowIndex(row);
+			const list = row.closest<HTMLElement>(SELECTORS.list) ?? undefined;
+			toggles.push(Number.isNaN(index) ? { row } : { row, list, index });
 		}
 	}
 	// Bottom up, since expanding a row rebuilds the rows below it.
 	for (const { row, list, index } of toggles.toReversed()) {
 		if (!list || index === undefined) {
-			clickElement(row);
+			// Clicking a row's label opens it in most views; its arrow only expands or collapses it.
+			clickElement(row.querySelector<HTMLElement>(SELECTORS.twistie) ?? row);
 			continue;
 		}
 		const current = rowAtIndex(row, list, index);
-		// Clicking a row's label opens it in most views; its arrow only expands or collapses it.
 		const twistie = current?.querySelector<HTMLElement>(SELECTORS.twistie);
-		if (!current || !twistie || current.getAttribute("aria-expanded") === String(expanded)) continue;
+		if (!current || !twistie || expandedState(current) === expanded) continue;
 		if (current.matches(SELECTORS.stickyRow)) clickStickyTwistie(current, twistie);
 		else clickElement(twistie);
 	}
@@ -86,7 +94,7 @@ export function setExpanded(target: Target, expanded: boolean): SetExpandedResul
  */
 function rowAtIndex(row: HTMLElement, list: HTMLElement, index: number): HTMLElement | null {
 	if (row.isConnected && rowIndex(row) === index) return row;
-	const showing = [...list.querySelectorAll<HTMLElement>(`${SELECTORS.row}[data-index="${index}"]`)];
+	const showing = [...list.querySelectorAll<HTMLElement>(`:is(${SELECTORS.row})[data-index="${index}"]`)];
 	return showing.find((element) => !element.matches(SELECTORS.stickyRow)) ?? showing[0] ?? null;
 }
 
@@ -146,15 +154,31 @@ function targetRows(target: Target): { rows: HTMLElement[]; ends: Set<string>; m
  * in case the list changed since the target was resolved. Returns the
  * paths of the Explorer's selected rows afterwards.
  */
-export function select(items: { hint: string; path: string }[]): string[] {
+export async function select(items: { hint: string; path: string }[], alsoSelected: string[] = []): Promise<string[]> {
 	const rows = visibleRows(sidebars());
+	const clicked = [...alsoSelected];
 	for (const { hint, path } of items) {
 		const row = rows.find((r) => hintOf(r) === hint);
-		if (row && rowPath(row) === path) clickRow(row, { addToSelection: true });
+		if (row && rowPath(row) === path) {
+			clickRow(row, { addToSelection: true });
+			clicked.push(path);
+		}
 	}
-	const selected = document.querySelectorAll(
-		`${SELECTORS.views.explorer} ${SELECTORS.row}.selected:not(${SELECTORS.stickyRow})`,
-	);
+	// VS Code shows the new selection at once. Theia redraws its trees a few
+	// milliseconds later, after a debounce, so this waits for the clicked
+	// rows, and the ones the caller selected another way, to show as
+	// selected, for up to 300ms.
+	const deadline = performance.now() + 300;
+	let paths = selectedExplorerPaths();
+	while (!clicked.every((path) => paths.includes(path)) && performance.now() < deadline) {
+		await nextFrame();
+		paths = selectedExplorerPaths();
+	}
+	return paths;
+}
+
+function selectedExplorerPaths(): string[] {
+	const selected = document.querySelectorAll(`${SELECTORS.views.explorer} ${SELECTORS.selectedRow}`);
 	const paths = [...selected].map(rowPath).filter((path): path is string => path !== undefined);
 	return [...new Set(paths)];
 }

@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { currentEditor } from "./editor";
 import { connectToRelay, type RelayClient } from "./relay-connection";
 import { hintSpacingRule } from "./hint-spacing";
 import { log } from "./output";
-import type { PageApi, PageSettings } from "./shared/types";
+import type { Editor, PageApi, PageSettings } from "./shared/types";
 
 /** An exception thrown by the page's own code, as opposed to a failure to reach it. */
 export class PageError extends Error {}
@@ -28,8 +29,8 @@ interface PageTarget {
 }
 
 /**
- * Runs the hint script and its styles in every VS Code window, through the
- * Chrome DevTools Protocol on VS Code's debug pipe, which the relay holds
+ * Runs the hint script and its styles in every editor window, through the
+ * Chrome DevTools Protocol on the editor's debug pipe, which the relay holds
  * (cdp-relay.ts). Windows that already run this version are left alone.
  * channelId is the DOM id of the status bar item that carries requests.
  * Returns how many windows were injected. A window that fails is skipped,
@@ -49,7 +50,7 @@ export async function injectAll(files: PageFiles, channelId: string, settings: P
 }
 
 /**
- * Calls a function of the hint script (window.__beans) in the VS Code window
+ * Calls a function of the hint script (window.__beans) in the editor window
  * that has focus, the one a Talon command was spoken to, and resolves to its
  * value. Throws NotInjectedError when that window has no script, for example
  * because it was still being built when Beans injected on startup, so callers
@@ -76,7 +77,7 @@ async function evaluateInFocusedWindow(expression: string): Promise<unknown> {
 			pages.length === 1
 				? pages[0]
 				: pages[focused.findIndex((result) => result.status === "fulfilled" && result.value === true)];
-		if (!page) throw new Error("no focused VS Code window");
+		if (!page) throw new Error("no focused editor window");
 		return evaluate(relay, page, expression);
 	});
 }
@@ -91,18 +92,29 @@ async function withRelay<T>(action: (relay: RelayClient) => Promise<T>): Promise
 	}
 }
 
-// Editor windows are pages served from vscode-file://, which forks of VS
-// Code keep.
+// VS Code's windows are pages served from vscode-file://, which its forks
+// keep. Theia's are its frontend's index.html, from file:// in its app; the
+// splash screen it shows while starting is a page too.
+const isWorkbenchUrl: Record<Editor, (url: string) => boolean> = {
+	vscode: (url) => url.startsWith("vscode-file://"),
+	theia: (url) => /\/lib\/frontend\/index\.html(?:[?#]|$)/.test(url),
+};
+
 async function workbenchPages(relay: RelayClient): Promise<PageTarget[]> {
 	const { targetInfos } = await relay.send<{ targetInfos: PageTarget[] }>("Target.getTargets");
-	return targetInfos.filter((target) => target.type === "page" && target.url.startsWith("vscode-file://"));
+	return targetInfos.filter((target) => target.type === "page" && isWorkbenchUrl[currentEditor()](target.url));
 }
+
+// The element a window has once its workbench is built. Other VS Code
+// windows, such as the Process Explorer, have none.
+const WORKBENCH_SELECTORS: Record<Editor, string> = { vscode: ".monaco-workbench", theia: "#theia-app-shell" };
 
 // The version is a hash of the files and the settings, so editing the files
 // and running "Beans: Inject" again, or changing a setting, replaces the old
 // copy in every window. The channel's id holds the publisher, so the script
 // and the rule hiding the channel get it from here.
 function injectionScript(files: PageFiles, channelId: string, settings: PageSettings): string {
+	const editor = currentEditor();
 	const js = fs.readFileSync(files.script, "utf8");
 	const css = fs.readFileSync(files.style, "utf8");
 	const settingsRule = hintSpacingRule(settings.hintSpacing);
@@ -110,14 +122,15 @@ function injectionScript(files: PageFiles, channelId: string, settings: PageSett
 		.createHash("sha256")
 		.update(js)
 		.update(css)
+		.update(editor)
 		.update(channelId)
 		.update(settingsRule)
 		.digest("hex")
 		.slice(0, 12);
 	return `(() => {
-		// Other editor windows, such as the Process Explorer, have no workbench.
-		if (!document.querySelector(".monaco-workbench")) return false;
+		if (!document.querySelector(${JSON.stringify(WORKBENCH_SELECTORS[editor])})) return false;
 		if (window.__beansVersion === ${JSON.stringify(version)}) return false;
+		window.__beansEditor = ${JSON.stringify(editor)};
 		window.__beansChannelId = ${JSON.stringify(channelId)};
 		document.getElementById("beans-style")?.remove();
 		const style = document.createElement("style");

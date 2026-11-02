@@ -7,11 +7,29 @@ import path from "node:path";
  * The editor's user data folder, from the extension's global storage folder:
  * <user data>/User/globalStorage/<extension id>, or
  * <user data>/User/profiles/<profile>/globalStorage/<extension id> in a profile.
+ * Theia has no User folder: its global storage is in its configuration
+ * folder, <config>/globalStorage/<extension id>, so that's the one returned.
  */
 export function userDataDir(globalStoragePath: string): string {
-	let dir = globalStoragePath;
-	while (path.basename(dir) !== "User" && path.dirname(dir) !== dir) dir = path.dirname(dir);
-	return path.dirname(dir);
+	const globalStorage = ancestorNamed(globalStoragePath, "globalStorage");
+	if (globalStorage === undefined) return path.parse(globalStoragePath).root;
+	// The User folder is right above globalStorage, or three above in a
+	// profile. Looking for "User" from the top instead would stop at a
+	// Windows account named User, C:\Users\User.
+	const parent = path.dirname(globalStorage);
+	if (path.basename(parent) === "User") return path.dirname(parent);
+	const profiles = path.dirname(parent);
+	const user = path.dirname(profiles);
+	if (path.basename(profiles) === "profiles" && path.basename(user) === "User") return path.dirname(user);
+	return parent;
+}
+
+/** The nearest folder of this name among dir and the folders above it. */
+function ancestorNamed(dir: string, name: string): string | undefined {
+	for (let current = dir; path.dirname(current) !== current; current = path.dirname(current)) {
+		if (path.basename(current) === name) return current;
+	}
+	return undefined;
 }
 
 /**

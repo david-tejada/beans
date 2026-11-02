@@ -10,7 +10,15 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
-import { frame, isRelayAddress, isToken, parseMessage, readMessages, type RelayAddress } from "./relay-protocol";
+import {
+	DETACH,
+	frame,
+	isRelayAddress,
+	isToken,
+	parseMessage,
+	readMessages,
+	type RelayAddress,
+} from "./relay-protocol";
 import { isRecord } from "./shared/guards";
 
 /** What the relay is asked to do. Without pid it starts the editor at once, for development. */
@@ -26,6 +34,10 @@ export interface RelayJob {
 main();
 
 function main(): void {
+	if (process.argv[3] === DETACH) {
+		startDetached(process.argv[2] ?? "");
+		return;
+	}
 	const job = parseJob(process.argv[2]);
 	// Errors go in a log next to the relay file, since the relay has no terminal.
 	const logFile = path.join(path.dirname(job.relayFile), "beans-relay.log");
@@ -36,6 +48,25 @@ function main(): void {
 	const start = () => startEditorWithRelay(job, log);
 	if (job.pid === undefined) start();
 	else whenExited(job.pid, start);
+}
+
+/**
+ * Starts the relay again as a detached process, prints its pid, and exits.
+ * Theia kills every process under its plugin host when it quits, which
+ * would take the waiting relay with it; the copy started here has this
+ * process as its parent, and once this exits, none.
+ */
+function startDetached(jobText: string): void {
+	const relay = spawn(process.execPath, [process.argv[1] ?? "", jobText], {
+		detached: true,
+		stdio: "ignore",
+		env: process.env,
+	});
+	relay.once("spawn", () => {
+		process.stdout.write(String(relay.pid));
+		process.exit(0);
+	});
+	relay.once("error", () => process.exit(1));
 }
 
 function parseJob(text: string | undefined): RelayJob {

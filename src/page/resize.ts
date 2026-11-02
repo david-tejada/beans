@@ -1,7 +1,7 @@
 import type { ResizePart, ResizeRequest, ResizeResult, ResizeTarget } from "../shared/types";
 import { clickRow, nextFrame } from "./click";
 import { sidebarRowWithHint } from "./rows";
-import { SELECTORS } from "./selectors";
+import { EDITOR, SELECTORS } from "./selectors";
 
 type Axis = "width" | "height";
 
@@ -15,6 +15,7 @@ const PART_NAMES: Record<ResizePart, string> = { sidebar: "sidebar", secondary: 
  * { problem }.
  */
 export async function resize({ target, by = 0, to, max }: ResizeRequest): Promise<ResizeResult> {
+	if (EDITOR === "theia") return { problem: "resizing doesn't work in Theia yet; drag the divider with the mouse" };
 	const found = await resizeTarget(target);
 	if ("problem" in found) return found;
 	const { element, axis, name } = found;

@@ -1,6 +1,9 @@
 // What crosses between the extension host and the hint script in the page.
 // Both sides import these; nothing here runs.
 
+/** The editor Beans runs in: VS Code or one of its forks, or Eclipse Theia, whose page is built differently. */
+export type Editor = "vscode" | "theia";
+
 /** One spoken item: a hint, or a range of rows from one hint to another, both included. */
 export type TargetItem = { hint: string } | { from: string; to: string };
 
@@ -17,6 +20,8 @@ export interface ResolvedItem {
 	hint: string;
 	path: string;
 	isFolder: boolean;
+	/** Whether a folder is open; false for a file. */
+	isExpanded: boolean;
 	view: View;
 }
 
@@ -59,8 +64,11 @@ export interface WindowPoint {
 export interface PageApi {
 	resolve(target: Target): ResolveResult;
 	setExpanded(target: Target, expanded: boolean): SetExpandedResult;
-	/** Adds these Explorer rows to the selection and returns the paths selected afterwards. */
-	select(items: { hint: string; path: string }[]): string[];
+	/**
+	 * Adds these Explorer rows to the selection and returns the paths selected
+	 * afterwards, once they and the paths in alsoSelected show as selected.
+	 */
+	select(items: { hint: string; path: string }[], alsoSelected?: string[]): Promise<string[]>;
 	resize(request: ResizeRequest): Promise<ResizeResult>;
 	rowPoint(hint: string): WindowPoint | null;
 }
