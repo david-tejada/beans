@@ -10,10 +10,18 @@ export function clickRow(row: HTMLElement, options?: { addToSelection?: boolean 
 }
 
 /** Clicks an element near the start of its label, like a mouse would. */
-export function clickElement(target: HTMLElement, { addToSelection = false }: { addToSelection?: boolean } = {}): void {
+export function clickElement(
+	element: HTMLElement,
+	{ addToSelection = false }: { addToSelection?: boolean } = {},
+): void {
 	// VS Code tells macOS apart the same way.
 	const isMac = navigator.userAgent.includes("Macintosh");
-	const { x, y } = labelPoint(target);
+	const { x, y } = labelPoint(element);
+	// A mouse clicks the innermost element under it, and the events bubble
+	// up from there. Theia listens on elements inside a row, such as a
+	// Source Control change's name, which opens its diff.
+	const under = document.elementFromPoint(x, y);
+	const target = under instanceof HTMLElement && element.contains(under) ? under : element;
 	const init: MouseEventInit = {
 		bubbles: true,
 		cancelable: true,

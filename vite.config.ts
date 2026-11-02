@@ -60,7 +60,10 @@ export default defineConfig({
 			// changes what the next one sees.
 			"no-await-in-loop": "off",
 			// The hint script's globals on window are prefixed on purpose, to clash with nothing.
-			"no-underscore-dangle": ["error", { allow: ["__beans", "__beansChannelId", "__beansStop", "__beansVersion"] }],
+			"no-underscore-dangle": [
+				"error",
+				{ allow: ["__beans", "__beansChannelId", "__beansEditor", "__beansStop", "__beansVersion"] },
+			],
 		},
 	},
 	test: {

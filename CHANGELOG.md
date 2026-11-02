@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Beans works in the Eclipse Theia IDE desktop app: hints on the sidebar rows and view headers, numbers in the Command Palette, and the file commands. **Relaunch with hints** used to fail there without a word. Resizing, expanding more than one level and collapsing a file's folder say they don't work in Theia yet.
+- When **Relaunch with hints** can't quit the editor, Beans says so, and quitting it yourself within two minutes finishes the relaunch.
 - The `beans.hintSpacing` setting replaces `beans.hintStyle`, with three spacings: `"compact"`, `"default"` and `"comfortable"`. The default sits between the other two, with less space around the pill than before; `"comfortable"` is the old default. The old setting is gone, so set the new one if you had it.
 - A **Beans** Output Channel (View → Output) logs what Beans does: the relay, each injection, errors from the page. Paste it into a bug report.
 - Expand and collapse work on every row that has an arrow, such as Search files, Outline symbols, Source Control commits and view headers, instead of only on folders. Search files used to expand the file's row in the Explorer, and rows that aren't files were skipped.

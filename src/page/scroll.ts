@@ -15,12 +15,15 @@ export function scroll(direction: ScrollDirection, hint: string): void {
 		console.log(`[beans] no list to scroll${hint ? ` for hint "${hint}"` : ""}`);
 		return;
 	}
-	const rows = list.querySelector<HTMLElement>(SELECTORS.listRows) ?? list;
 	const rowHeight = list.querySelector(SELECTORS.row)?.getBoundingClientRect().height ?? 22;
 	// Keep two rows of the old view on screen, so you don't lose your place.
 	const page = Math.max(list.getBoundingClientRect().height - 2 * rowHeight, rowHeight);
 	const distance = { up: -page, down: page, top: -1e6, bottom: 1e6 }[direction];
-	scrollBy(rows, distance);
+	const scroller = list.matches(SELECTORS.nativeScroller)
+		? list
+		: list.querySelector<HTMLElement>(SELECTORS.nativeScroller);
+	if (scroller) scroller.scrollBy({ top: distance });
+	else scrollBy(list.querySelector<HTMLElement>(SELECTORS.listRows) ?? list, distance);
 }
 
 /**
@@ -82,7 +85,7 @@ function listToScroll(hint: string): HTMLElement | null {
  */
 export function placeRow(rows: HTMLElement, index: number, top: number): void {
 	for (let attempt = 0; attempt < 5; attempt++) {
-		const rendered = [...rows.querySelectorAll<HTMLElement>(`:scope > ${SELECTORS.row}`)];
+		const rendered = [...rows.querySelectorAll<HTMLElement>(`:scope > :is(${SELECTORS.row})`)];
 		const row = rendered.find((element) => rowIndex(element) === index);
 		let distance;
 		if (row) distance = row.getBoundingClientRect().top - top;

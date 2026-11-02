@@ -1,6 +1,6 @@
 import type { View } from "../shared/types";
 import { isNumberHint } from "./hints";
-import { HINT_ATTR, SELECTORS, VIEW_NAMES } from "./selectors";
+import { EDITOR, HINT_ATTR, SELECTORS, VIEW_NAMES } from "./selectors";
 
 // Finding the rows: which are on screen, which has a hint, what a row shows.
 
@@ -28,7 +28,7 @@ export function visibleRows(containers: HTMLElement[]): HTMLElement[] {
 	for (const container of containers) {
 		const containerRows: { row: HTMLElement; top: number; left: number }[] = [];
 		for (const row of container.querySelectorAll<HTMLElement>(rowSelector())) {
-			if (row.querySelector(SELECTORS.skip.join(","))) continue;
+			if (SELECTORS.skip.length && row.querySelector(SELECTORS.skip.join(","))) continue;
 			const rect = row.getBoundingClientRect();
 			// A header isn't in a list, so it only has to show inside the sidebar.
 			// The header of a sidebar's only view is hidden and has no height.
@@ -49,7 +49,7 @@ function rowSelector(): string {
 /** The sidebar row or view header with this hint in a container. */
 export function rowWithHint(container: HTMLElement, hint: string): HTMLElement | null {
 	const withHint = `[${HINT_ATTR}="${hint}"]`;
-	return container.querySelector<HTMLElement>(`${SELECTORS.row}${withHint}, ${SELECTORS.paneHeader}${withHint}`);
+	return container.querySelector<HTMLElement>(`:is(${SELECTORS.row}, ${SELECTORS.paneHeader})${withHint}`);
 }
 
 /** The row with this hint in the sidebars. */
@@ -104,8 +104,22 @@ function stickyBottom(row: HTMLElement): number {
 
 /** The path of the file a row shows, or undefined when it isn't a file. */
 export function rowPath(row: Element): string | undefined {
+	const label = row.matches(SELECTORS.pathLabel) ? row : row.querySelector(SELECTORS.pathLabel);
 	// The hover text adds decorations after the path: "/a/notes.txt • Modified".
-	return row.querySelector(SELECTORS.pathLabel)?.getAttribute("aria-label")?.split(" • ")[0];
+	return label?.getAttribute(SELECTORS.pathAttribute)?.split(" • ")[0];
+}
+
+/**
+ * Whether a row or view header is expanded, or null when it can't expand.
+ * VS Code says so in aria-expanded; Theia only in its chevron's class.
+ */
+export function expandedState(row: Element): boolean | null {
+	if (EDITOR === "theia") {
+		const twistie = row.querySelector(SELECTORS.twistie);
+		return twistie ? !twistie.classList.contains(SELECTORS.collapsedClass) : null;
+	}
+	const state = row.getAttribute("aria-expanded");
+	return state === null ? null : state === "true";
 }
 
 export function viewOf(row: Element): View {

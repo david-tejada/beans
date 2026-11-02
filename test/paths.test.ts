@@ -12,7 +12,15 @@ describe("userDataDir", () => {
 		expect(userDataDir("/data/User/profiles/abc123/globalStorage/david-tejada.beans")).toBe("/data");
 	});
 
-	test("gives the root's parent when there's no User folder", () => {
+	test("in Theia, gives the configuration folder holding globalStorage", () => {
+		expect(userDataDir("/Users/me/.theia-ide/globalStorage/david-tejada.beans")).toBe("/Users/me/.theia-ide");
+	});
+
+	test("in Theia, isn't fooled by an account folder named User", () => {
+		expect(userDataDir("/Users/User/.theia-ide/globalStorage/david-tejada.beans")).toBe("/Users/User/.theia-ide");
+	});
+
+	test("gives the root when there's no globalStorage folder", () => {
 		expect(userDataDir("/nowhere")).toBe("/");
 	});
 });

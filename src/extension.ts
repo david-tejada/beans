@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
+import { editorOf, setEditor } from "./editor";
 import { callPage, injectAll, type PageFiles } from "./inject";
 import { createOutput } from "./output";
 import { userDataDir } from "./paths";
@@ -19,13 +20,17 @@ interface Page {
 
 export function activate(context: vscode.ExtensionContext): void {
 	context.subscriptions.push(createOutput());
+	const editor = editorOf(vscode.env.uriScheme);
+	setEditor(editor);
 	setUserDataDir(userDataDir(context.globalStorageUri.fsPath));
 	const page: Page = {
 		files: {
 			script: path.join(context.extensionPath, "dist", "beans.js"),
 			style: path.join(context.extensionPath, "media", "beans.css"),
 		},
-		channelId: `${context.extension.id}.channel`,
+		// VS Code gives a status bar item the DOM id <extension id>.<item id>,
+		// Theia status-bar-<item id>.
+		channelId: editor === "theia" ? "status-bar-channel" : `${context.extension.id}.channel`,
 	};
 	const channel = createChannel();
 	context.subscriptions.push(channel);

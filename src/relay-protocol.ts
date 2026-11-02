@@ -61,3 +61,6 @@ export function isToken(text: string, token: string): boolean {
 	const expected = Buffer.from(token);
 	return given.length === expected.length && crypto.timingSafeEqual(given, expected);
 }
+
+/** The flag relaunch.ts passes so the relay starts its real copy under no parent (cdp-relay.ts). */
+export const DETACH = "--detach";
