@@ -43,18 +43,23 @@ export async function theiaProgram(): Promise<string> {
 	const app = process.platform === "darwin" ? path.join(dir, "TheiaIDE.app") : path.join(dir, "squashfs-root");
 	if (!fs.existsSync(app)) {
 		fs.rmSync(dir, { recursive: true, force: true });
-		fs.mkdirSync(dir, { recursive: true });
+		// It's unpacked in here and moved into place once whole, so a run
+		// stopped halfway leaves no app that looks ready.
+		const partial = path.join(dir, "partial");
+		fs.mkdirSync(partial, { recursive: true });
 		const download = path.join(dir, file);
 		await pipeline(Readable.fromWeb((await fetchOk(`${release}/${file}`)).body!), fs.createWriteStream(download));
 		const hash = crypto.createHash("sha512").update(fs.readFileSync(download)).digest("base64");
 		if (hash !== sha512) throw new Error(`${file} from ${release} doesn't match its sha512`);
 		if (process.platform === "darwin") {
-			execFileSync("ditto", ["-x", "-k", download, dir]);
+			execFileSync("ditto", ["-x", "-k", download, partial]);
 		} else {
 			fs.chmodSync(download, 0o755);
 			// stderr goes into the error, should the AppImage fail to unpack.
-			execFileSync(download, ["--appimage-extract"], { cwd: dir, stdio: ["ignore", "ignore", "pipe"] });
+			execFileSync(download, ["--appimage-extract"], { cwd: partial, stdio: ["ignore", "ignore", "pipe"] });
 		}
+		fs.renameSync(path.join(partial, path.basename(app)), app);
+		fs.rmSync(partial, { recursive: true });
 		fs.rmSync(download);
 	}
 	return executableIn(app);

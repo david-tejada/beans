@@ -215,11 +215,13 @@ const SETUPS: Record<EditorKind, Setup> = {
 		async ready(editor) {
 			await editor.waitFor(`typeof window.__beans === "object"`, "Beans to load in Theia");
 			// The left side panel stays collapsed until a view opens in it, so
-			// press Show Explorer until it shows. Theia ignores keys for a
-			// moment after the page loads.
+			// press Show Explorer until the panel shows. Theia ignores keys for
+			// a moment after the page loads. The key toggles the Explorer, so
+			// it's pressed only while the panel is hidden, not while the
+			// Explorer's files are still loading.
 			const mac = process.platform === "darwin";
 			const showExplorer = { key: "E", code: "KeyE", keyCode: 69, shift: true, ctrl: !mac, meta: mac };
-			const explorerShown = `!!document.querySelector("#theia-left-side-panel:not(.lm-mod-hidden) #files .theia-TreeNode")`;
+			const explorerShown = `!!document.querySelector("#theia-left-side-panel:not(.lm-mod-hidden) #files")`;
 			await until(async () => {
 				if (await editor.evaluate<boolean>(explorerShown)) return true;
 				await editor.press(showExplorer);

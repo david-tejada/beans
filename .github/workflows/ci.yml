@@ -82,5 +82,12 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The pinned Theia, unpacked, so a pull request doesn't fetch 400 MB
+      # from download.eclipse.org each time. The weekly run of the newest
+      # downloads it fresh.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .theia-test
+          key: theia-${{ runner.os }}-${{ env.THEIA_VERSION }}
       - name: Hints in a real Theia IDE
         run: xvfb-run -a pnpm test:integration:theia

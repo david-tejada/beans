@@ -29,8 +29,9 @@ const DOM = {
 		headerTitle: ".label",
 		// Theia's Explorer shows Open Editors collapsed.
 		view: "Open Editors",
-		headerExpanded: (header: string) =>
-			`!!${header} && !${header}.querySelector(".theia-ExpansionToggle.theia-mod-collapsed")`,
+		// A view is open when its part is taller than its header: the
+		// size on screen, not the collapsed class Beans itself reads.
+		headerExpanded: (header: string) => `${header}?.parentElement.offsetHeight > ${header}?.offsetHeight`,
 		tabName: "#theia-main-content-panel .lm-TabBar-tab .lm-TabBar-tabLabel",
 		paletteRow: ".quick-input-widget .monaco-list-row",
 	},
