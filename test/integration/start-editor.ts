@@ -202,11 +202,15 @@ const SETUPS: Record<EditorKind, Setup> = {
 			writeJson(settingsFile, baseSettings);
 			return {
 				command: program,
+				// The workspace goes first: Theia reads its arguments with yargs,
+				// which takes a word after a bare flag such as
+				// --disable-gpu-sandbox for that flag's value, and then opens no
+				// folder.
 				args: [
+					workspace,
 					"--remote-debugging-pipe",
 					`--user-data-dir=${path.join(home, "user-data")}`,
 					...(process.platform === "linux" ? ["--no-sandbox", "--disable-gpu-sandbox"] : []),
-					workspace,
 				],
 				env: { THEIA_CONFIG_DIR: configDir },
 				dataDir: configDir,
