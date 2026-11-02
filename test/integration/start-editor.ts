@@ -52,8 +52,12 @@ export interface Editor {
 	press(key: Key): Promise<void>;
 	/** Types text into whatever has the focus. */
 	type(text: string): Promise<void>;
+	/** Clicks the middle of the element the selector matches, with the mouse, as a user would. */
+	click(selector: string): Promise<void>;
 	/** Replaces the profile's keybindings; the editor picks them up on its own. */
 	setKeybindings(bindings: Keybinding[]): void;
+	/** Replaces the profile's settings; the editor picks them up on its own. */
+	setSettings(settings: object): void;
 	/** Quits the editor and removes its temporary profile. */
 	close(): Promise<void>;
 }
@@ -110,7 +114,7 @@ export async function startEditor(workspace: string): Promise<Editor> {
 			}),
 		]);
 		const sessionId = await attachToWorkbench(client, setup.isWorkbench);
-		const editor = makeEditor(client, sessionId, launch.setKeybindings, stop);
+		const editor = makeEditor(client, sessionId, launch, stop);
 		await setup.ready(editor);
 		return editor;
 	} catch (error) {
@@ -136,6 +140,7 @@ interface Launch {
 	/** Where Beans and the relay look for the relay file: the folder setUserDataDir takes. */
 	dataDir: string;
 	setKeybindings: (bindings: Keybinding[]) => void;
+	setSettings: (settings: object) => void;
 }
 
 const SETUPS: Record<EditorKind, Setup> = {
@@ -168,6 +173,9 @@ const SETUPS: Record<EditorKind, Setup> = {
 				setKeybindings(bindings) {
 					writeJson(path.join(userDataDir, "User", "keybindings.json"), bindings);
 				},
+				setSettings(settings) {
+					writeJson(path.join(userDataDir, "User", "settings.json"), settings);
+				},
 			};
 		},
 		isWorkbench: (url) => url.startsWith("vscode-file://"),
@@ -188,10 +196,10 @@ const SETUPS: Record<EditorKind, Setup> = {
 			const configDir = path.join(home, "theia");
 			fs.mkdirSync(path.join(configDir, "plugins"), { recursive: true });
 			fs.symlinkSync(ROOT, path.join(configDir, "plugins", "beans"), "junction");
-			writeJson(path.join(configDir, "settings.json"), {
-				"security.workspace.trust.enabled": false,
-				"workbench.startupEditor": "none",
-			});
+			// Settings a test sets go on top of these.
+			const baseSettings = { "security.workspace.trust.enabled": false, "workbench.startupEditor": "none" };
+			const settingsFile = path.join(configDir, "settings.json");
+			writeJson(settingsFile, baseSettings);
 			return {
 				command: program,
 				args: [
@@ -207,6 +215,9 @@ const SETUPS: Record<EditorKind, Setup> = {
 						path.join(configDir, "keymaps.json"),
 						bindings.map(({ key, command, args }) => ({ keybinding: key, command, args })),
 					);
+				},
+				setSettings(settings) {
+					writeJson(settingsFile, { ...baseSettings, ...settings });
 				},
 			};
 		},
@@ -254,12 +265,7 @@ async function attachToWorkbench(client: RelayClient, isWorkbench: (url: string)
 	return sessionId;
 }
 
-function makeEditor(
-	client: RelayClient,
-	sessionId: string,
-	setKeybindings: (bindings: Keybinding[]) => void,
-	stop: () => Promise<void>,
-): Editor {
+function makeEditor(client: RelayClient, sessionId: string, launch: Launch, stop: () => Promise<void>): Editor {
 	interface Evaluation {
 		result: { value?: unknown };
 		exceptionDetails?: { text: string; exception?: { description?: string } };
@@ -295,7 +301,22 @@ function makeEditor(
 		async type(text: string): Promise<void> {
 			await client.send("Input.insertText", { text }, sessionId);
 		},
-		setKeybindings,
+		async click(selector: string): Promise<void> {
+			const point = await editor.evaluate<{ x: number; y: number } | null>(
+				`(() => {
+					const box = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();
+					return box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null;
+				})()`,
+			);
+			if (!point) throw new Error(`Nothing to click: ${selector}`);
+			// Theia's tab bars act on pointer events, which an element's click() doesn't send.
+			for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) {
+				const button = type === "mouseMoved" ? "none" : "left";
+				await client.send("Input.dispatchMouseEvent", { type, ...point, button, clickCount: 1 }, sessionId);
+			}
+		},
+		setKeybindings: launch.setKeybindings,
+		setSettings: launch.setSettings,
 		async close(): Promise<void> {
 			await stop();
 		},

@@ -69,6 +69,29 @@ export function findRow(hint: string): HTMLElement | null {
 	return row;
 }
 
+/**
+ * What a row shows, for stable hints to follow an item from frame to frame
+ * (see rowKeys), and its place in its list: the lists reuse row elements
+ * for other items as they scroll.
+ */
+export function rowKeyParts(row: HTMLElement): { row: HTMLElement; base: string; index: string | null } {
+	const index = row.closest(SELECTORS.listIndex)?.getAttribute("data-index") ?? null;
+	return { row, base: rowBase(row), index };
+}
+
+// The id of the view container the row is in, then a file row's path, else
+// its depth in the tree and its name. A sticky scroll row stands for a
+// folder whose own row is scrolled past, so it shares that row's key.
+function rowBase(row: HTMLElement): string {
+	const container = row.closest(SELECTORS.viewContainer)?.id ?? "";
+	const name = nameElement(row).textContent?.trim() ?? "";
+	if (row.matches(SELECTORS.paneHeader)) return `${container}|header|${name}`;
+	// VS Code gives a tree row's depth in aria-level; Theia only indents it.
+	const depth = EDITOR === "theia" ? row.style.paddingLeft : (row.getAttribute("aria-level") ?? "");
+	const item = rowPath(row) ?? `${depth}|${name}`;
+	return `${container}|${viewOf(row)}|${item}`;
+}
+
 /** The element holding the row's name, where the hint is shown before the name. */
 export function nameElement(row: HTMLElement): HTMLElement {
 	if (row.matches(SELECTORS.paneHeader)) return row.querySelector<HTMLElement>(SELECTORS.paneTitle) ?? row;

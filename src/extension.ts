@@ -59,9 +59,10 @@ export function activate(context: vscode.ExtensionContext): void {
 			inject(page, channel, { quiet: isRecord(options) && options.quiet === true }),
 		),
 		vscode.commands.registerCommand("beans.relaunch", relaunch),
-		// A new spacing reaches the windows through a fresh injection.
+		// A changed setting reaches the windows through a fresh injection.
 		vscode.workspace.onDidChangeConfiguration((event) => {
-			if (event.affectsConfiguration("beans.hintSpacing")) void inject(page, channel, { quiet: true });
+			const changed = ["beans.hintSpacing", "beans.stableHints"].some((name) => event.affectsConfiguration(name));
+			if (changed) void inject(page, channel, { quiet: true });
 		}),
 	);
 
@@ -174,5 +175,8 @@ async function inject(page: Page, channel: vscode.StatusBarItem, { quiet }: { qu
 /** The user's settings for the page (see injectAll). */
 function settings(): PageSettings {
 	const config = vscode.workspace.getConfiguration("beans");
-	return { hintSpacing: toHintSpacing(config.get<string>("hintSpacing", "default")) };
+	return {
+		hintSpacing: toHintSpacing(config.get<string>("hintSpacing", "default")),
+		stableHints: config.get<boolean>("stableHints", false),
+	};
 }
