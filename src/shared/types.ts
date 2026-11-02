@@ -78,4 +78,5 @@ export type HintSpacing = "compact" | "default" | "comfortable";
 /** The user's settings the page needs. */
 export interface PageSettings {
 	hintSpacing: HintSpacing;
+	stableHints: boolean;
 }

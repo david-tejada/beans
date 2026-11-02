@@ -95,6 +95,7 @@ These take one object, `{ target }`, where a target is `{ items: [{ hint } | { f
 ## Settings
 
 - **`beans.hintSpacing`**: `"default"` draws a pill with room for two letters and a little space around it; `"comfortable"` draws a wider pill with VS Code's own space after the icon, which is more; `"compact"` draws a narrower pill close to the icon and the name. A change shows at once in every window.
+- **`beans.stableHints`**: off by default, so Beans letters the rows top to bottom and a row's letter changes when you scroll or expand a folder above it. Turned on, each row gets a letter no other row has and keeps it, even after it scrolls away and comes back. Once the single letters are taken, new rows get two letters. Switching a sidebar to another view, such as from Explorer to Source Control, forgets that sidebar's letters, and so does closing it; reloading the window or changing a Beans setting forgets them all. Two rows that look the same, such as a file in both Staged Changes and Changes, can trade letters when they scroll away and come back.
 
 ## Development
 

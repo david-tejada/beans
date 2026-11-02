@@ -175,9 +175,10 @@ function parentOf(uri: vscode.Uri): vscode.Uri {
 /** Opens files (pinned, not as a preview) and toggles folders open or closed. */
 async function openItems(items: Item[], options: vscode.TextDocumentShowOptions = {}): Promise<void> {
 	// Theia has no command that toggles a folder, so the page clicks its
-	// arrow, which it finds by hint. Hints are positions, so the folders go
-	// first and bottom up: toggling one moves only the rows below it, and
-	// opening a file adds a row to Open Editors, above them all.
+	// arrow, which it finds by hint. Hints are positions unless
+	// beans.stableHints is on, so the folders go first and bottom up:
+	// toggling one moves only the rows below it, and opening a file adds a
+	// row to Open Editors, above them all.
 	if (currentEditor() === "theia") {
 		for (const folder of items.filter((item) => item.isFolder).toReversed()) {
 			await setExpanded({ items: [{ hint: folder.hint }] }, !folder.isExpanded);

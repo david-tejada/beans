@@ -39,6 +39,8 @@ export interface Editor {
 	type(text: string): Promise<void>;
 	/** Replaces the profile's keybindings.json; VS Code picks it up on its own. */
 	setKeybindings(bindings: object[]): void;
+	/** Replaces the profile's settings.json; VS Code picks it up on its own. */
+	setSettings(settings: object): void;
 	/** Quits the editor and removes its temporary profile. */
 	close(): Promise<void>;
 }
@@ -179,6 +181,9 @@ function makeEditor(client: RelayClient, sessionId: string, userDataDir: string,
 		},
 		setKeybindings(bindings: object[]): void {
 			fs.writeFileSync(path.join(userDataDir, "User", "keybindings.json"), JSON.stringify(bindings, null, "\t"));
+		},
+		setSettings(settings: object): void {
+			fs.writeFileSync(path.join(userDataDir, "User", "settings.json"), JSON.stringify(settings, null, "\t"));
 		},
 		async close(): Promise<void> {
 			await stop();
