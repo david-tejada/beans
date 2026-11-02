@@ -5,3 +5,4 @@ dist/
 .vscode-test/
 .vite-hooks/_
 .DS_Store
+.theia-test/

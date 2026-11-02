@@ -22,7 +22,7 @@ A VS Code extension that puts letter hints on sidebar rows for Talon voice contr
 
 `pnpm dev` (or `vpr dev`) opens a separate VS Code running this checkout with hints live; a rebuild re-injects the page script and reloads the window for extension-host changes. To see the hints from outside, connect to the relay named in `.dev/user-data/beans-relay.json` (address and token) and evaluate in the page, as `scripts/dev.mts` does to reload. "Relaunch with hints" from an ordinary VS Code is the other path to test when `relaunch.ts` or `cdp-relay.ts` change.
 
-`pnpm test:integration` (`vpr test:integration`) runs `test/integration/` against a downloaded VS Code, started through the relay the way `pnpm dev` starts it, and asserts in the page. CI runs it on pull requests and weekly against Insiders; when VS Code renames a class, this is the test that fails, and `src/page/selectors.ts` is where to fix it.
+`pnpm test:integration` (`vpr test:integration`) runs `test/integration/` against a downloaded VS Code, started through the relay the way `pnpm dev` starts it, and asserts in the page; `pnpm test:integration:theia` runs the same tests in a downloaded Theia IDE, with a temporary `THEIA_CONFIG_DIR` whose `plugins/beans` links to this checkout. What differs between the editors lives in two tables, `SETUPS` in `start-editor.ts` (how to start one and when it's ready) and `DOM` in `hints.test.ts` (the selectors the assertions use, written out rather than taken from `selectors.ts` so a wrong selector fails). CI runs both on pull requests (Theia pinned) and weekly against Insiders and the newest Theia; when an editor renames a class, this is the test that fails, and `src/page/selectors.ts` is where to fix it.
 
 ## Releases and the Talon folder
 

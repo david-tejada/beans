@@ -64,3 +64,30 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Hints in a real VS Code
         run: xvfb-run -a pnpm test:integration
+
+  # The same test in the Theia IDE, whose sidebars are its own, so a release
+  # can rename what Beans hints there. Its own job, so a Theia break doesn't
+  # hide a VS Code one. Pinned here, so a new Theia release doesn't fail an
+  # unrelated pull request; the weekly run tries the newest.
+  integration-theia:
+    runs-on: ubuntu-latest
+    env:
+      BEANS_TEST_EDITOR: theia
+      THEIA_VERSION: "1.76.1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The pinned Theia, unpacked, so a pull request doesn't fetch 400 MB
+      # from download.eclipse.org each time. The weekly run of the newest
+      # downloads it fresh.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .theia-test
+          key: theia-${{ runner.os }}-${{ env.THEIA_VERSION }}
+      - name: Hints in a real Theia IDE
+        run: xvfb-run -a pnpm test:integration:theia
