@@ -3,16 +3,16 @@
    and the views' headers, get the attribute. Every pill is the same width, wide enough for two wide
    letters like MW, so a single or narrow letter sits centered with more room
    around it. The injected style sets --beans-hint-width and --beans-gap from
-   the beans.hintStyle setting. */
+   the beans.hintSpacing setting; the fallbacks are the default spacing's. */
 .monaco-list-row [data-beans-hint]::before,
 .pane-header [data-beans-hint]::before {
 	content: attr(data-beans-hint);
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: var(--beans-hint-width, 3em);
+	width: var(--beans-hint-width, 2.75em);
 	height: 1.5em;
-	margin-right: var(--beans-gap, 6px);
+	margin-right: var(--beans-gap, 3px);
 	border-radius: 999px;
 	background: color-mix(in srgb, currentColor 15%, transparent);
 	font-size: 0.77em;
@@ -34,11 +34,11 @@
    with hints hidden the sidebars look as they always do. */
 body:not(.beans-hidden) .monaco-list-row[data-beans-hint] .monaco-icon-label::before,
 body:not(.beans-hidden) .monaco-list-row[data-beans-hint] .monaco-tl-twistie {
-	padding-right: var(--beans-gap, 6px);
+	padding-right: var(--beans-gap, 3px);
 }
 body:not(.beans-hidden) .monaco-list-row[data-beans-hint] .monaco-icon-label-iconpath,
 body:not(.beans-hidden) .pane-header[data-beans-hint] > .codicon:first-of-type {
-	margin-right: var(--beans-gap, 6px);
+	margin-right: var(--beans-gap, 3px);
 }
 
 body.beans-hidden .monaco-list-row [data-beans-hint]::before,

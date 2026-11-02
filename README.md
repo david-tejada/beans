@@ -92,7 +92,7 @@ These take one object, `{ target }`, where a target is `{ items: [{ hint } | { f
 
 ## Settings
 
-- **`beans.hintStyle`**: `"default"` draws a pill with room for two letters and VS Code's own space after the icon; `"compact"` draws a narrower pill close to the icon and the name. A change shows at once in every window.
+- **`beans.hintSpacing`**: `"default"` draws a pill with room for two letters and a little space around it; `"comfortable"` draws a wider pill with VS Code's own space after the icon, which is more; `"compact"` draws a narrower pill close to the icon and the name. A change shows at once in every window.
 
 ## Development
 

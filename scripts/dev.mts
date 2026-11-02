@@ -102,11 +102,12 @@ async function main(): Promise<void> {
 	console.log(`[dev] extension host debugger on port ${INSPECT_PORT} (Attach to Extension Host in launch.json)`);
 	await waitForFile(relayFile);
 
-	// A new extension bundle needs a window reload, as Developer: Reload
-	// Window does; the page script and stylesheet the extension picks up by itself.
+	// A new extension bundle or manifest (package.json: commands, settings) needs
+	// a window reload, as Developer: Reload Window does; the page script and
+	// stylesheet the extension picks up by itself.
 	let timer: NodeJS.Timeout | undefined;
-	for (const file of ["extension.js", "cdp-relay.js"]) {
-		fs.watchFile(path.join(root, "dist", file), { interval: 300 }, () => {
+	for (const file of ["dist/extension.js", "dist/cdp-relay.js", "package.json"]) {
+		fs.watchFile(path.join(root, file), { interval: 300 }, () => {
 			clearTimeout(timer);
 			timer = setTimeout(() => {
 				console.log(`[dev] ${file} changed, reloading the window`);

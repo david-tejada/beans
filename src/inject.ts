@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { connectToRelay, type RelayClient } from "./relay-connection";
-import { hintStyleRule } from "./hint-style";
+import { hintSpacingRule } from "./hint-spacing";
 import { log } from "./output";
 import type { PageApi, PageSettings } from "./shared/types";
 
@@ -105,7 +105,7 @@ async function workbenchPages(relay: RelayClient): Promise<PageTarget[]> {
 function injectionScript(files: PageFiles, channelId: string, settings: PageSettings): string {
 	const js = fs.readFileSync(files.script, "utf8");
 	const css = fs.readFileSync(files.style, "utf8");
-	const settingsRule = hintStyleRule(settings.hintStyle);
+	const settingsRule = hintSpacingRule(settings.hintSpacing);
 	const version = crypto
 		.createHash("sha256")
 		.update(js)

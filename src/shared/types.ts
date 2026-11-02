@@ -65,9 +65,9 @@ export interface PageApi {
 	rowPoint(hint: string): WindowPoint | null;
 }
 
-export type HintStyle = "default" | "compact";
+export type HintSpacing = "compact" | "default" | "comfortable";
 
 /** The user's settings the page needs. */
 export interface PageSettings {
-	hintStyle: HintStyle;
+	hintSpacing: HintSpacing;
 }

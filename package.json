@@ -61,19 +61,21 @@
 		"configuration": {
 			"title": "Beans",
 			"properties": {
-				"beans.hintStyle": {
+				"beans.hintSpacing": {
 					"type": "string",
 					"scope": "application",
 					"default": "default",
 					"enum": [
+						"compact",
 						"default",
-						"compact"
+						"comfortable"
 					],
 					"enumDescriptions": [
-						"A pill with room for two letters, and VS Code's own space after the icon.",
-						"A narrower pill, close to the icon and the name."
+						"A narrower pill, close to the icon and the name.",
+						"A pill with room for two letters, with a little space around it.",
+						"A wider pill, with VS Code's own space after the icon, which is more."
 					],
-					"description": "How the hints look."
+					"description": "How much room the hints take: the pill's width, and the space between it and the icon and the name."
 				}
 			}
 		}
