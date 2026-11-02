@@ -1,0 +1,42 @@
+name: insiders
+
+# Runs the integration test against VS Code Insiders once a week, so a class
+# VS Code renames in its next release is known before it ships. A failure
+# opens an issue, unless one is open already. GitHub pauses a schedule after
+# 60 days without a commit; the Actions tab says so, and a run by hand resumes it.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  VP_GIT_HOOKS: "0"
+  VSCODE_VERSION: insiders
+
+jobs:
+  insiders:
+    if: github.repository == 'david-tejada/beans'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Hints in VS Code Insiders
+        run: xvfb-run -a pnpm test:integration
+      - name: Open an issue, unless one is open
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(gh issue list --label vscode-insiders --state open --json number --jq '.[0].number')" ]; then
+            gh issue create --title "The hints break in VS Code Insiders" --label vscode-insiders \
+              --body "The weekly run against VS Code Insiders failed: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. VS Code has probably renamed a class that src/page/selectors.ts names."
+          fi

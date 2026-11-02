@@ -58,7 +58,7 @@ jobs:
       - name: Format, lint and type checks
         run: pnpm exec vp check
       - name: Unit tests
-        run: pnpm exec vp test --run
+        run: pnpm exec vp test --run --project unit
       - name: Release notes from CHANGELOG.md
         run: node scripts/release-notes.mts > notes.md
       - name: Package

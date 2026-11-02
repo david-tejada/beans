@@ -64,7 +64,20 @@ export default defineConfig({
 		},
 	},
 	test: {
-		include: ["test/**/*.test.ts"],
+		projects: [
+			{ test: { name: "unit", include: ["test/*.test.ts"] } },
+			// Downloads and drives a real VS Code: pnpm test:integration.
+			{
+				test: {
+					name: "integration",
+					include: ["test/integration/*.test.ts"],
+					// Longer than a waitFor, so a wait that gives up says what it waited for.
+					testTimeout: 90_000,
+					hookTimeout: 300_000,
+					fileParallelism: false,
+				},
+			},
+		],
 	},
 	staged: {
 		"*.{ts,json,md,yml,yaml,css}": "vp check --fix",

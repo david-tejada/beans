@@ -2,5 +2,6 @@
 node_modules/
 dist/
 .dev/
+.vscode-test/
 .vite-hooks/_
 .DS_Store
