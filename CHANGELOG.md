@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The `beans.hintSpacing` setting replaces `beans.hintStyle`, with three spacings: `"compact"`, `"default"` and `"comfortable"`. The default sits between the other two, with less space around the pill than before; `"comfortable"` is the old default. The old setting is gone, so set the new one if you had it.
 - A **Beans** Output Channel (View → Output) logs what Beans does: the relay, each injection, errors from the page. Paste it into a bug report.
 - Expand and collapse work on every row that has an arrow, such as Search files, Outline symbols, Source Control commits and view headers, instead of only on folders. Search files used to expand the file's row in the Explorer, and rows that aren't files were skipped.
 - Expand and collapse leave the keyboard focus where it was (except "expand T deep N", which goes through the Explorer), and collapsing a sticky scroll row no longer selects it or scrolls the tree: the folder stays where its sticky row was.

@@ -13,7 +13,7 @@ A VS Code extension that puts letter hints on sidebar rows for Talon voice contr
 - The page enforces Trusted Types: set attributes and classes, never assign HTML strings.
 - Every VS Code class name the page depends on lives in `src/page/selectors.ts`. A new selector goes there, with a comment saying what VS Code element it is, since VS Code renames classes between releases and that file is where we look when hints vanish.
 - Talon's requests arrive as plain JSON through command-server. `src/requests.ts` checks them once at the boundary; past it, the code trusts the types. Keep new parsing there, with a unit test.
-- Pure logic goes in modules that import neither `vscode` nor the DOM (`paths.ts`, `globs.ts`, `requests.ts`, `hint-style.ts`, `page/hints.ts`), so `test/` can import them without a mock. There is no `vscode` mock, and that's deliberate.
+- Pure logic goes in modules that import neither `vscode` nor the DOM (`paths.ts`, `globs.ts`, `requests.ts`, `hint-spacing.ts`, `page/hints.ts`), so `test/` can import them without a mock. There is no `vscode` mock, and that's deliberate.
 - The relay protocol (`src/relay-protocol.ts`) is JSON messages ended by `\0`, the framing Chromium uses on its debug pipe; the relay passes messages through, renumbering ids. A change on one side is a change on both.
 - Work in the extension host stays short and async: a Talon command blocks until it returns, and the hint script runs on the page's main thread, so DOM reads and writes stay batched inside one `requestAnimationFrame`.
 - User-facing text follows the README's voice: plain sentences, "Beans" as the subject, what happened and what to do. Diagnostics go to the "Beans" Output Channel (`src/output.ts`), toasts only for what the user must act on.

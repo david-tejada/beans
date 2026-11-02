@@ -7,7 +7,7 @@ import { userDataDir } from "./paths";
 import { relaunch, reportError, setDevelopment } from "./relaunch";
 import { setUserDataDir } from "./relay-connection";
 import { hintFrom, isRecord, resizeRequestFrom, scrollDirectionFrom } from "./requests";
-import { isHintStyle } from "./hint-style";
+import { toHintSpacing } from "./hint-spacing";
 import type { PageSettings, ResizeRequest } from "./shared/types";
 import { registerTargetCommands } from "./target-commands";
 
@@ -54,9 +54,9 @@ export function activate(context: vscode.ExtensionContext): void {
 			inject(page, channel, { quiet: isRecord(options) && options.quiet === true }),
 		),
 		vscode.commands.registerCommand("beans.relaunch", relaunch),
-		// A new hint style reaches the windows through a fresh injection.
+		// A new spacing reaches the windows through a fresh injection.
 		vscode.workspace.onDidChangeConfiguration((event) => {
-			if (event.affectsConfiguration("beans.hintStyle")) void inject(page, channel, { quiet: true });
+			if (event.affectsConfiguration("beans.hintSpacing")) void inject(page, channel, { quiet: true });
 		}),
 	);
 
@@ -168,6 +168,6 @@ async function inject(page: Page, channel: vscode.StatusBarItem, { quiet }: { qu
 
 /** The user's settings for the page (see injectAll). */
 function settings(): PageSettings {
-	const hintStyle = vscode.workspace.getConfiguration("beans").get<string>("hintStyle", "default");
-	return { hintStyle: isHintStyle(hintStyle) ? hintStyle : "default" };
+	const config = vscode.workspace.getConfiguration("beans");
+	return { hintSpacing: toHintSpacing(config.get<string>("hintSpacing", "default")) };
 }
