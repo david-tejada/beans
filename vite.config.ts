@@ -69,14 +69,15 @@ export default defineConfig({
 	test: {
 		projects: [
 			{ test: { name: "unit", include: ["test/*.test.ts"] } },
-			// Downloads and drives a real VS Code: pnpm test:integration.
+			// Downloads and drives a real VS Code, or Theia IDE: pnpm test:integration(:theia).
 			{
 				test: {
 					name: "integration",
 					include: ["test/integration/*.test.ts"],
 					// Longer than a waitFor, so a wait that gives up says what it waited for.
 					testTimeout: 90_000,
-					hookTimeout: 300_000,
+					// The first run downloads the editor in beforeAll: Theia's is 400 MB.
+					hookTimeout: 600_000,
 					fileParallelism: false,
 				},
 			},

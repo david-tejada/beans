@@ -31,6 +31,7 @@
 		"check": "vp check",
 		"test": "vp test --project unit",
 		"test:integration": "vp pack && vp test --run --project integration",
+		"test:integration:theia": "vp pack && BEANS_TEST_EDITOR=theia vp test --run --project integration",
 		"package": "vp pack && vsce package --no-dependencies",
 		"prepare": "vp hooks enable"
 	},
