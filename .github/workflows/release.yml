@@ -66,15 +66,10 @@ jobs:
       # Both publishes skip a version the registry already has, so a run that
       # failed halfway can be rerun.
       - name: Publish to Open VSX
-        # Until the david-tejada namespace is verified
-        # (EclipseFdn/open-vsx.org#15099), a token. Then drop the secret and
-        # the check below: without a token, ovsx exchanges the GitHub ID token
-        # itself.
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: |
-          [ -n "$OVSX_PAT" ] || { echo "The OVSX_PAT secret is missing."; exit 1; }
-          pnpm exec ovsx publish "beans-$VERSION.vsix" --skip-duplicate
+        # Trusted publishing: this workflow file is registered on the
+        # extension at open-vsx.org, and ovsx exchanges GitHub's ID token
+        # for a short-lived publish token. No secret.
+        run: pnpm exec ovsx publish "beans-$VERSION.vsix" --trusted-publishing --skip-duplicate
       - name: Publish to the Marketplace
         run: pnpm exec vsce publish --oidc --packagePath "beans-$VERSION.vsix" --skip-duplicate
       - name: Tag and GitHub release
