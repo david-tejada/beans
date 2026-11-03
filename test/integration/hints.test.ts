@@ -158,11 +158,7 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(opened).toBe(true);
 	});
 
-	// Not in Theia yet: its tree reuses a row element for whichever item comes
-	// to its place, so after an expand, c.txt's row is a.txt's old element at
-	// the same index, and rowKeys in src/page/row-keys.ts takes that for a
-	// rename and gives c.txt a.txt's letter.
-	it.skipIf(EDITOR_KIND === "theia")("keeps a row's letter with beans.stableHints", async () => {
+	it("keeps a row's letter with beans.stableHints", async () => {
 		// A changed setting injects the script again, which sets this.
 		editor.setSettings({ "beans.stableHints": true });
 		await editor.waitFor("window.__beansStableHints === true", "the stable hints script");

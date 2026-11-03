@@ -155,7 +155,7 @@ function labelRows(memory: StableMemory): StableMemory {
 	let next = memory;
 	let letters = sidebarRows.map((_, index) => letterHint(index));
 	if (STABLE_HINTS) {
-		const rows = rowKeys(sidebarRows.map(rowKeyParts), memory.rows);
+		const rows = rowKeys(sidebarRows.map(rowKeyParts), memory.rows, EDITOR !== "theia");
 		const keys = [...rows.values()].map(({ key }) => key);
 		next = { letters: stableLetterHints(keys, memory.letters), rows };
 		letters = keys.map((key) => next.letters.get(key) ?? "");
