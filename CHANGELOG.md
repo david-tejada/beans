@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.1
+
 - Beans is no longer marked as a preview on the Marketplace and Open VSX.
 - In Theia, with `beans.stableHints`, a folder's files no longer take the letters of the rows that were in their place when it expands.
 

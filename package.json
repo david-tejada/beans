@@ -1,7 +1,7 @@
 {
 	"name": "beans",
 	"displayName": "Beans for Talon",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Letter hints on every row of the VS Code sidebars, for Talon.",
 	"categories": [
 		"Other"
