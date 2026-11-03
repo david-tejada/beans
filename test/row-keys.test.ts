@@ -5,13 +5,14 @@ import { rowKeys, type RowKey } from "../src/page/row-keys";
 type Frame = [string, string, string | null][];
 
 // Runs rowKeys over frames, from no previous frame, and returns each frame's
-// keys in screen order.
-function keysOverFrames(frames: Frame[]): string[][] {
+// keys in screen order. indexKeepsItem is true as in VS Code, false as in Theia.
+function keysOverFrames(frames: Frame[], indexKeepsItem = true): string[][] {
 	let previous = new Map<string, RowKey>();
 	return frames.map((frame) => {
 		previous = rowKeys(
 			frame.map(([row, base, index]) => ({ row, base, index })),
 			previous,
+			indexKeepsItem,
 		);
 		return [...previous.values()].map(({ key }) => key);
 	});
@@ -77,5 +78,25 @@ describe("rowKeys", () => {
 	test("rows outside a list's numbering keep their key while their element stays", () => {
 		const [, renamed] = keysOverFrames([[["header", "Outline", null]], [["header", "Outline (3)", null]]]);
 		expect(renamed).toEqual(["Outline"]);
+	});
+
+	test("where the index doesn't keep the item, an element at the same index for another item gets that item's key", () => {
+		// Theia, expanding dir: each index keeps its element, so c.txt comes
+		// to a.txt's element and a.txt moves down to a new one.
+		const [, expanded] = keysOverFrames(
+			[
+				[
+					["e0", "dir", "0"],
+					["e1", "a.txt", "1"],
+				],
+				[
+					["e0", "dir", "0"],
+					["e1", "dir/c.txt", "1"],
+					["e2", "a.txt", "2"],
+				],
+			],
+			false,
+		);
+		expect(expanded).toEqual(["dir", "dir/c.txt", "a.txt"]);
 	});
 });
