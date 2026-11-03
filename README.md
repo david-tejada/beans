@@ -6,7 +6,7 @@ Beans puts letter hints on every row of the VS Code sidebars (Explorer, Search, 
 
 Beyond clicking, you can right-click a row, scroll a list, resize the sidebars and the panel, and act on files and folders by hint: "open bat and cap", "file move harp past ink to drum", "stage air".
 
-Beans is a preview. I use it every day on macOS; Windows and Linux should work but I haven't tried them.
+I use Beans every day on macOS; Windows and Linux should work but I haven't tried them.
 
 ## Requirements
 
