@@ -30,6 +30,8 @@ The commands that act on rows start with `bean`, so they don't clash with other 
 
 A **hint** is the letters on a row, spoken with your community alphabet words. A **target** is one or more hints and ranges joined with "and", where a range is `<hint> past <hint>` and includes both ends. For example: `bean open harp past ink and made`.
 
+Wherever a hint goes, you can say `this` for the selected rows, so you don't have to look for the letters: `bean split this`, `downer this`, `view this bigger`, `bean move this to drum`. In a target, `this` is every selected row; where one row is needed, and as the end of a range, it's the first one. The selection is the one in the sidebar list you're in, or the Explorer's while you're in the editor. Only the rows on screen count: when Beans can tell the selection goes on past the screen, it says so and leaves it alone, so scroll until all of it shows.
+
 ### Hints
 
 | Say | What it does |

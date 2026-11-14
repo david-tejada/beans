@@ -1,11 +1,16 @@
 import { describe, expect, test } from "vite-plus/test";
-import { hintFrom, resizeRequestFrom, scrollDirectionFrom, targetFrom } from "../src/requests";
+import { hintFrom, resizeRequestFrom, scrollDirectionFrom, SELECTION_HINT, targetFrom } from "../src/requests";
 
 describe("hintFrom", () => {
 	test("keeps letters and digits, lower case", () => {
 		expect(hintFrom("AB")).toBe("ab");
 		expect(hintFrom(" a-b 3 ")).toBe("ab3");
 		expect(hintFrom(12)).toBe("12");
+	});
+
+	test('passes "this" through, which stands for the selected rows', () => {
+		expect(SELECTION_HINT).toBe("this");
+		expect(hintFrom("this")).toBe("this");
 	});
 
 	test("is empty for nothing", () => {
@@ -31,6 +36,12 @@ describe("targetFrom", () => {
 		});
 	});
 
+	test('keeps "this", on its own and as a range\'s end', () => {
+		expect(targetFrom({ items: [{ hint: "this" }, { from: "this", to: "d" }] })).toEqual({
+			items: [{ hint: "this" }, { from: "this", to: "d" }],
+		});
+	});
+
 	test("drops items that aren't hints or ranges", () => {
 		expect(targetFrom({ items: [{ hint: "a" }, { from: "b" }, 3] })).toEqual({ items: [{ hint: "a" }] });
 	});
@@ -48,6 +59,10 @@ describe("resizeRequestFrom", () => {
 		expect(resizeRequestFrom({ target: "sidebar", by: 2 })).toEqual({ target: "sidebar", by: 2 });
 		expect(resizeRequestFrom({ target: { hint: "a" }, to: 300 })).toEqual({ target: { hint: "a" }, to: 300 });
 		expect(resizeRequestFrom({ target: "panel", max: true })).toEqual({ target: "panel", max: true });
+	});
+
+	test('accepts "this" as the hint', () => {
+		expect(resizeRequestFrom({ target: { hint: "this" }, by: -1 })).toEqual({ target: { hint: "this" }, by: -1 });
 	});
 
 	test("leaves out amounts of the wrong type", () => {

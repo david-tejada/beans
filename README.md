@@ -4,7 +4,7 @@ Beans puts letter hints on every row of the VS Code sidebars (Explorer, Search, 
 
 ![Hints on the Explorer rows](media/screenshot.png)
 
-Beyond clicking, you can right-click a row, scroll a list, resize the sidebars and the panel, and act on files and folders by hint: "bean open bat and cap", "bean move harp past ink to drum", "bean stage air".
+Beyond clicking, you can right-click a row, scroll a list, resize the sidebars and the panel, and act on files and folders by hint: "bean open bat and cap", "bean move harp past ink to drum", "bean stage air". Wherever a hint goes, "this" stands for the selected rows, so you don't have to find a letter: "bean split this", "downer this".
 
 I use Beans every day on macOS; Windows and Linux should work but I haven't tried them.
 
@@ -56,6 +56,14 @@ The Talon commands are in [`beans-talon/`](beans-talon), mirrored to the [beans-
 - **Inject** (`beans.inject`) runs the hint script again in every window. Beans also runs it when a command reaches a window that doesn't have the script, and asks you to say the command again.
 - **Relaunch** (`beans.relaunch`) quits VS Code and starts it again with the debug pipe, held by `cdp-relay.js`. The relay gives up after two minutes if the quit is canceled, and is replaced by the next Relaunch.
 
+### "this"
+
+Anywhere you say a hint, you can say "this" for the selected rows instead: "bean expand this", "bean move this to drum", "bean righty this", "view this bigger", "downer this". beans-talon sends the hint `"this"`, which no real hint can be.
+
+- **Which selection.** The sidebar list that has the keyboard focus. When the focus is elsewhere, such as in the editor, the Explorer's selection; else the first sidebar list that has one. A list that has the focus and nothing selected means nothing is selected, and Beans says so.
+- **Every row or the first.** In a target, "this" is every selected row. Where a command takes one row (pick, right-click, scroll, resize), and as the end of a range ("this past drum"), it's the first selected row. "bean this" clicks it, which leaves only that row selected.
+- **Only the rows on screen.** The sidebar lists only draw the rows on screen, so Beans can't see selected rows that are scrolled away. When it can tell the selection goes on past the screen, it leaves "this" alone and says so rather than act on part of it: scroll until the whole selection shows. It can tell when a selected row sits at the top or bottom edge of the list with more rows beyond it, or, in Theia, just past the edge, and in VS Code when only one of several selected rows shows. In VS Code that edge rule also stops a selection that happens to end on the last row showing. It can't tell when rows selected one by one, far apart, are scrolled away while others show; then "this" is the ones that show.
+
 ### Resize commands
 
 `beans.resize` takes `{ target, by }` (steps, negative to shrink), `{ target, to }` (pixels) or `{ target, max: true }`. The target is `"sidebar"`, `"secondary"` (the secondary sidebar), `"panel"`, or `{ hint }` for the sidebar view holding that row or header. It drags the divider in the page like a mouse would, so VS Code keeps the new size as if you'd dragged it. A step is 60px for a width and 44px (two rows) for a height. A collapsed view is expanded first. When VS Code stops the divider short, because a view is at its smallest or largest, Beans says where it stopped.
@@ -73,7 +81,7 @@ The Talon commands are in [`beans-talon/`](beans-talon), mirrored to the [beans-
 
 ### Target commands
 
-These take one object, `{ target }`, where a target is `{ items: [{ hint } | { from, to }] }`. In Talon, a target is hints and ranges joined with "and": "harp past ink and made" is H to I, plus M. Ranges include both ends. Rows that aren't files, such as search matches, are skipped with a warning. The extension reads the rows' paths from the page through the debug pipe.
+These take one object, `{ target }`, where a target is `{ items: [{ hint } | { from, to }] }`. In Talon, a target is hints and ranges joined with "and": "harp past ink and made" is H to I, plus M. Ranges include both ends. "this" is the selected rows (see above). Rows that aren't files, such as search matches, are skipped with a warning. The extension reads the rows' paths from the page through the debug pipe.
 
 | Talon                                | Command                                            | What it does                                                                                                                                                                                                                                                                                                            |
 | ------------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

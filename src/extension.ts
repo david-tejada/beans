@@ -7,7 +7,7 @@ import { createOutput } from "./output";
 import { userDataDir } from "./paths";
 import { relaunch, reportError, setDevelopment } from "./relaunch";
 import { setUserDataDir } from "./relay-connection";
-import { hintFrom, isRecord, resizeRequestFrom, scrollDirectionFrom } from "./requests";
+import { hintFrom, isRecord, resizeRequestFrom, scrollDirectionFrom, SELECTION_HINT } from "./requests";
 import { toHintSpacing } from "./hint-spacing";
 import type { PageSettings, ResizeRequest } from "./shared/types";
 import { registerTargetCommands } from "./target-commands";
@@ -130,7 +130,7 @@ async function rowPoint(letters: unknown): Promise<{ x: number; y: number } | nu
 		await reportError(error);
 		return null;
 	}
-	if (!point) vscode.window.showWarningMessage(`Beans: no row with hint ${hint.toUpperCase()}.`);
+	if (!point) warn(hint === SELECTION_HINT ? "nothing is selected" : `no row with hint ${hint.toUpperCase()}`);
 	return point ?? null;
 }
 

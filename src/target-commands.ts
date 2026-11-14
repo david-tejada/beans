@@ -6,7 +6,7 @@ import { globToRegExp } from "./globs";
 import { callPage } from "./inject";
 import { isWithin, toUriPath, withHome } from "./paths";
 import { reportError } from "./relaunch";
-import { isRecord, targetFrom } from "./requests";
+import { isRecord, SELECTION_HINT, targetFrom } from "./requests";
 import type { Editor, ResolvedItem, Target } from "./shared/types";
 import type { API as GitApi, GitExtension, Repository } from "./types/git";
 
@@ -130,12 +130,22 @@ async function resolveTarget(target: Target | null): Promise<Item[] | null> {
 		if (uri) items.push({ ...item, uri });
 		else unplaced.push(item.hint);
 	}
-	const problems = [];
-	if (result.missing.length) problems.push(`no row with hint ${hintList(result.missing)}`);
+	const problems = missingProblems(result.missing, result.selectionRunsPast);
 	if (result.skipped.length) problems.push(`skipped ${hintList(result.skipped)}, not files`);
 	if (unplaced.length) problems.push(`skipped ${hintList(unplaced)}, outside the workspace folders`);
 	warnAbout(problems);
 	return items;
+}
+
+/** What to say about the hints the page didn't find, and about "this" (SELECTION_HINT) when it couldn't be used. */
+function missingProblems(missing: string[], selectionRunsPast: boolean): string[] {
+	const hints = missing.filter((hint) => hint !== SELECTION_HINT);
+	const problems = [];
+	if (hints.length) problems.push(`no row with hint ${hintList(hints)}`);
+	if (missing.includes(SELECTION_HINT)) problems.push("nothing is selected");
+	if (selectionRunsPast)
+		problems.push("the selection may run past the screen, so it was left alone; scroll until all of it shows");
+	return problems;
 }
 
 function warnAbout(problems: string[]): void {
@@ -304,7 +314,7 @@ async function setExpanded(target: Target | null, expanded: boolean): Promise<vs
 		await reportError(error);
 		return null;
 	}
-	if (result.missing.length) warnAbout([`no row with hint ${hintList(result.missing)}`]);
+	warnAbout(missingProblems(result.missing, result.selectionRunsPast));
 	return result.folders.map((folder) => uriFor(folder.path)).filter((uri): uri is vscode.Uri => uri !== null);
 }
 

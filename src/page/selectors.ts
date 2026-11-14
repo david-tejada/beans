@@ -59,6 +59,9 @@ const VSCODE = {
 	pathAttribute: "aria-label",
 	// A row the user selected, leaving out sticky scroll copies of rows.
 	selectedRow: ".monaco-list-row.selected:not(.monaco-tree-sticky-row)",
+	// A list holding one selected row, or more than one, wherever they are.
+	singleSelection: ".selection-single",
+	multipleSelection: ".selection-multiple",
 	// A list that scrolls natively, with scrollTop; VS Code's lists don't.
 	nativeScroller: NONE,
 	// The parts that resize commands can target, by the name they're called with.
@@ -138,6 +141,9 @@ const THEIA: typeof VSCODE = {
 	pathLabel: ".theia-FileStatNode[title], .result-head-info[title], .scmItem[title]",
 	pathAttribute: "title",
 	selectedRow: ".theia-TreeNode.theia-mod-selected",
+	// Theia doesn't say how many rows are selected.
+	singleSelection: NONE,
+	multipleSelection: NONE,
 	// The scrolling element of a tree, from the react-virtuoso list Theia
 	// uses. In Source Control's graph, it's the list itself.
 	nativeScroller: "[data-virtuoso-scroller]",

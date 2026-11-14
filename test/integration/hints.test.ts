@@ -21,6 +21,11 @@ const DOM = {
 		tabName: ".tabs-container .tab .label-name",
 		paletteRow: ".quick-input-widget .monaco-list-row",
 		sidebarItems: ".part.sidebar :is(.monaco-list-row, .pane-header)[data-beans-hint]",
+		// An Explorer file's row, to click, and a selected row.
+		fileRow: (name: string) => `.explorer-folders-view .monaco-list-row[aria-label=${JSON.stringify(name)}]`,
+		selectedRow: ".monaco-list-row.selected",
+		// What has the focus while typing in an editor.
+		editorInput: ".monaco-editor .native-edit-context, .monaco-editor textarea",
 		// The Activity Bar button that shows a view container, and the
 		// container's id.
 		containers: {
@@ -45,6 +50,9 @@ const DOM = {
 		tabName: "#theia-main-content-panel .lm-TabBar-tab .lm-TabBar-tabLabel",
 		paletteRow: ".quick-input-widget .monaco-list-row",
 		sidebarItems: "#theia-left-side-panel :is(.theia-TreeNode, .theia-view-container-part-header)[data-beans-hint]",
+		fileRow: (name: string) => `#files .theia-FileStatNode[title$=${JSON.stringify(`/${name}`)}]`,
+		selectedRow: ".theia-TreeNode.theia-mod-selected",
+		editorInput: ".monaco-editor .native-edit-context, .monaco-editor textarea",
 		containers: {
 			Explorer: { button: "#shell-tab-explorer-view-container", id: "explorer-view-container" },
 			Extensions: { button: "#shell-tab-vsx-extensions-view-container", id: "vsx-extensions-view-container" },
@@ -195,6 +203,63 @@ describe(`Beans in a real ${dom.name}`, () => {
 			await editor.waitFor("window.__beansStableHints === false", "the positional hints script");
 		}
 	});
+
+	it('resolves "this" to the selected rows, and says when nothing is selected', async () => {
+		await clickUntilSelected("a.txt");
+		expect(await namesOfThis()).toEqual({ names: ["a.txt"], missing: [] });
+
+		const b = await fileItem("b.txt");
+		await editor.evaluate(`window.__beans.select([${JSON.stringify(b)}])`);
+		expect(await namesOfThis()).toEqual({ names: ["a.txt", "b.txt"], missing: [] });
+
+		// With the focus in the editor, "this" is still the Explorer's selection.
+		await editor.waitFor(`!!document.querySelector(${JSON.stringify(dom.editorInput)})`, "an editor to open");
+		await editor.evaluate(`document.querySelector(${JSON.stringify(dom.editorInput)}).focus()`);
+		await editor.waitFor(`document.activeElement?.matches(${JSON.stringify(dom.editorInput)})`, "the editor's focus");
+		expect(await namesOfThis()).toEqual({ names: ["a.txt", "b.txt"], missing: [] });
+
+		// The first selected row's point, for a right-click.
+		const a = await fileItem("a.txt");
+		const point = await editor.evaluate<unknown>(`window.__beans.rowPoint("this")`);
+		expect(point).not.toBeNull();
+		expect(point).toEqual(await editor.evaluate<unknown>(`window.__beans.rowPoint(${JSON.stringify(a.hint)})`));
+
+		// Cmd+click (Ctrl+click) takes a selected row out of the selection.
+		await editor.evaluate(`window.__beans.select(${JSON.stringify([a, b])})`);
+		await editor.waitFor(`!document.querySelector(${JSON.stringify(dom.selectedRow)})`, "nothing to be selected");
+		expect(await namesOfThis()).toEqual({ names: [], missing: ["this"] });
+		expect(await editor.evaluate<unknown>(`window.__beans.rowPoint("this")`)).toBeNull();
+	});
+
+	// Clicks an Explorer file's row with the mouse until it shows as
+	// selected: Theia can miss a click while it's still settling.
+	async function clickUntilSelected(name: string): Promise<void> {
+		const selected = `!!document.querySelector(${JSON.stringify(dom.fileRow(name))})?.closest(${JSON.stringify(dom.selectedRow)})`;
+		for (let attempt = 0; attempt < 5; attempt++) {
+			await editor.click(dom.fileRow(name));
+			if (
+				await editor.waitFor(selected, `${name} to be selected`, 2000).then(
+					() => true,
+					() => false,
+				)
+			)
+				return;
+		}
+		throw new Error(`${name} didn't get selected`);
+	}
+
+	// What window.__beans.select takes for an Explorer file: its hint and path.
+	async function fileItem(name: string): Promise<{ hint: string; path: string }> {
+		const hint = await editor.waitFor<string>(rowHint(name), `the ${name} row`);
+		const result = await editor.evaluate<ResolveResult>(`window.__beans.resolve(${target(hint)})`);
+		return { hint, path: result.items[0]!.path };
+	}
+
+	// The names of the files "this" resolves to, and what it reports missing.
+	async function namesOfThis(): Promise<{ names: string[]; missing: string[] }> {
+		const result = await editor.evaluate<ResolveResult>(`window.__beans.resolve(${target("this")})`);
+		return { names: result.items.map((item) => path.basename(item.path)), missing: result.missing };
+	}
 
 	// Switches the primary sidebar with its Activity Bar button, then waits
 	// for Beans to relabel.
