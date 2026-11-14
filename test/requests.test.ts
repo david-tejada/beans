@@ -1,5 +1,13 @@
 import { describe, expect, test } from "vite-plus/test";
-import { hintFrom, resizeRequestFrom, scrollDirectionFrom, scrollPlaceFrom, targetFrom } from "../src/requests";
+import {
+	hintFrom,
+	resizeRequestFrom,
+	scrollChannelText,
+	scrollDirectionFrom,
+	scrollPlaceFrom,
+	scrollRequestFrom,
+	targetFrom,
+} from "../src/requests";
 
 describe("hintFrom", () => {
 	test("keeps letters and digits, lower case", () => {
@@ -42,6 +50,34 @@ describe("scrollPlaceFrom", () => {
 		expect(scrollPlaceFrom("side")).toBeNull();
 		expect(scrollPlaceFrom("up")).toBeNull();
 		expect(scrollPlaceFrom(2)).toBeNull();
+	});
+});
+
+describe("scrollChannelText and scrollRequestFrom", () => {
+	test("carry a scroll from the host to the page", () => {
+		const requests = [
+			{ direction: "down", hint: "", place: "document" },
+			{ direction: "up", hint: "", place: "left" },
+			{ direction: "bottom", hint: "", place: "right" },
+			{ direction: "top", hint: "", place: "bar" },
+			{ direction: "up", hint: "ab", place: "document" },
+		] as const;
+		for (const request of requests) {
+			expect(scrollRequestFrom(scrollChannelText(request))).toEqual(request);
+		}
+	});
+
+	test("keep only a hint's letters", () => {
+		expect(scrollChannelText({ direction: "down", hint: "A-b3", place: "document" })).toBe("down-ab-document");
+	});
+
+	test("read text from before the place was added as the document", () => {
+		expect(scrollRequestFrom("down-ab")).toEqual({ direction: "down", hint: "ab", place: "document" });
+	});
+
+	test("is null for text that isn't a scroll", () => {
+		expect(scrollRequestFrom("sideways--document")).toBeNull();
+		expect(scrollRequestFrom("down--middle")).toBeNull();
 	});
 });
 

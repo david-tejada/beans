@@ -19,8 +19,18 @@ describe("pageDistance", () => {
 		expect(pageDistance(777, 18)).toBe(612);
 	});
 
-	test("never moves less than one row", () => {
+	test("moves one row, but never more than the view", () => {
+		expect(pageDistance(44, 22)).toBe(22);
 		expect(pageDistance(22, 22)).toBe(22);
-		expect(pageDistance(10, 22)).toBe(22);
+		expect(pageDistance(10, 22)).toBe(10);
+		// A 1000px notebook cell in a 900px view.
+		expect(pageDistance(900, 1000)).toBe(900);
+	});
+
+	test("moves a plain 80% when the rows differ in height or weren't measured", () => {
+		expect(pageDistance(900, 0)).toBe(720);
+		expect(pageDistance(900, -5)).toBe(720);
+		expect(pageDistance(900, Number.NaN)).toBe(720);
+		expect(pageDistance(900, Number.POSITIVE_INFINITY)).toBe(720);
 	});
 });

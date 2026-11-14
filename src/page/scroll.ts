@@ -1,4 +1,4 @@
-import type { ScrollDirection, ScrollPlace } from "../requests";
+import type { ScrollPlace, ScrollRequest } from "../requests";
 import { nextFrame } from "./click";
 import { pageDistance } from "./page-distance";
 import { openQuickInput, sidebarRowWithHint, sidebars } from "./rows";
@@ -12,14 +12,14 @@ import { splitOnSide } from "./split-on-side";
  * under the view header with it), else for "bar" the tallest sidebar list,
  * and for "document" the editor split with the focus.
  */
-export function scroll(direction: ScrollDirection, hint: string, place: ScrollPlace): void {
+export function scroll({ direction, hint, place }: ScrollRequest): void {
 	const view = viewToScroll(hint, place);
 	if (!view) {
 		console.log(`[beans] nothing to scroll${hint ? ` for hint "${hint}"` : ` in the ${place}`}`);
 		return;
 	}
 	const page = pageDistance(view.box.getBoundingClientRect().height, view.rowHeight);
-	const distance = { up: -page, down: page, top: -1e6, bottom: 1e6 }[direction];
+	const distance = { up: -page, down: page, top: -TO_THE_END, bottom: TO_THE_END }[direction];
 	const scroller = view.box.matches(SELECTORS.nativeScroller)
 		? view.box
 		: view.box.querySelector<HTMLElement>(SELECTORS.nativeScroller);
@@ -27,9 +27,14 @@ export function scroll(direction: ScrollDirection, hint: string, place: ScrollPl
 	else scrollBy(view.rows, distance);
 }
 
+// Far enough to reach the top or the bottom of anything: a file of 50
+// million lines.
+const TO_THE_END = 1e9;
+
 /**
  * Something to scroll: the box it shows in, the element that moves inside
- * it (a list's rows, an editor's lines), and how tall one row or line is.
+ * it (a list's rows, an editor's lines), and how tall one row or line is,
+ * or 0 when its rows differ in height.
  */
 interface ScrollView {
 	box: HTMLElement;
@@ -40,23 +45,25 @@ interface ScrollView {
 function viewToScroll(hint: string, place: ScrollPlace): ScrollView | null {
 	if (place === "left" || place === "right") return documentIn(splitToScroll(place));
 	const quickInput = openQuickInput();
-	if (quickInput) return listView(quickInput.querySelector<HTMLElement>(SELECTORS.list));
+	if (quickInput) return listView(quickInput.querySelector<HTMLElement>(SELECTORS.list), true);
 	if (hint) {
 		const row = sidebarRowWithHint(hint);
 		if (row?.matches(SELECTORS.paneHeader))
-			return listView(row.parentElement?.querySelector<HTMLElement>(SELECTORS.list) ?? null);
-		return listView(row?.closest<HTMLElement>(SELECTORS.list) ?? null);
+			return listView(row.parentElement?.querySelector<HTMLElement>(SELECTORS.list) ?? null, true);
+		return listView(row?.closest<HTMLElement>(SELECTORS.list) ?? null, true);
 	}
-	if (place === "bar") return listView(tallestSidebarList());
+	if (place === "bar") return listView(tallestSidebarList(), true);
 	return documentIn(splitToScroll("document"));
 }
 
-function listView(list: HTMLElement | null): ScrollView | null {
+// Sidebar and quick pick rows are all one height; a notebook's cells and
+// Settings' rows aren't, so for those the first row says nothing.
+function listView(list: HTMLElement | null, rowsAlike: boolean): ScrollView | null {
 	if (!list) return null;
 	return {
 		box: list,
 		rows: list.querySelector<HTMLElement>(SELECTORS.listRows) ?? list,
-		rowHeight: list.querySelector(SELECTORS.row)?.getBoundingClientRect().height ?? 22,
+		rowHeight: rowsAlike ? list.querySelector(SELECTORS.row)?.getBoundingClientRect().height || 22 : 0,
 	};
 }
 
@@ -77,7 +84,7 @@ function documentIn(split: HTMLElement | null): ScrollView | null {
 	if (!split) return null;
 	const views = [
 		...[...split.querySelectorAll<HTMLElement>(SELECTORS.editor)].map((editor) => editorView(editor)),
-		...[...split.querySelectorAll<HTMLElement>(SELECTORS.list)].map((list) => listView(list)),
+		...[...split.querySelectorAll<HTMLElement>(SELECTORS.list)].map((list) => listView(list, false)),
 	];
 	let biggest: ScrollView | null = null;
 	let biggestArea = 0;
@@ -115,7 +122,9 @@ function splitToScroll(place: "document" | "left" | "right"): HTMLElement | null
 	const part = mark?.closest(SELECTORS.editorPart) ?? document;
 	const splits = shown(part.querySelectorAll<HTMLElement>(SELECTORS.editorGroup));
 	const focused = mark && (splits.includes(mark) ? mark : splitBelow(mark, splits));
-	if (place === "document") return focused;
+	// Theia marks no tab bar until a split has had the focus, such as right
+	// after it starts with editors open.
+	if (place === "document") return focused ?? splits[0] ?? null;
 	const boxes = splits.map((split) => split.getBoundingClientRect());
 	return splits[splitOnSide(boxes, place, focused?.getBoundingClientRect() ?? null)] ?? null;
 }
@@ -158,11 +167,22 @@ export function scrollBy(rows: HTMLElement, distance: number): void {
 		rows.dispatchEvent(
 			new WheelEvent("wheel", { bubbles: true, cancelable: true, view: window, deltaY, deltaMode: 0 }),
 		);
-	const before = scrollPosition(rows);
 	const guess = -distance;
+	// To the top or the bottom, one event far past the end does it, and the
+	// view stops there. Measuring would mislead in a long file (below).
+	if (Math.abs(distance) >= TO_THE_END) {
+		wheel(guess);
+		return;
+	}
+	const before = scrollPosition(rows);
 	wheel(guess);
 	const finish = () => {
-		const moved = scrollPosition(rows) - before;
+		let moved = scrollPosition(rows) - before;
+		// In a long file, Monaco keeps style.top small: each time the view
+		// passes another 500,000px, it moves the lines back by that much,
+		// rounded to a line. One page never moves that far, so a bigger move
+		// is that shift, and taking it off leaves the move to within a line.
+		if (Math.abs(distance) < MONACO_SHIFT / 2) moved -= Math.round(moved / MONACO_SHIFT) * MONACO_SHIFT;
 		const remaining = distance - moved;
 		if (moved === 0 || Math.abs(remaining) < 1) return;
 		wheel(guess * (remaining / moved));
@@ -170,6 +190,8 @@ export function scrollBy(rows: HTMLElement, distance: number): void {
 	if (scrollPosition(rows) !== before) finish();
 	else void nextFrame().then(finish);
 }
+
+const MONACO_SHIFT = 500_000;
 
 // A list moves its rows, and an editor its lines, by setting style.top to
 // minus the scroll position.

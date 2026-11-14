@@ -1,5 +1,8 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
+import { scrollChannelText, type ScrollRequest } from "../../src/requests";
 import type { Editor as EditorKind, ResolveResult } from "../../src/shared/types";
 import { EDITOR_KIND, KEYS, startEditor, type Editor, type Key } from "./start-editor";
 
@@ -20,6 +23,8 @@ const DOM = {
 		headerExpanded: (header: string) => `${header}?.getAttribute("aria-expanded") === "true"`,
 		tabName: ".tabs-container .tab .label-name",
 		paletteRow: ".quick-input-widget .monaco-list-row",
+		// What the palette's list moves by style.top as it scrolls.
+		paletteRows: ".quick-input-widget .monaco-list-rows",
 		sidebarItems: ".part.sidebar :is(.monaco-list-row, .pane-header)[data-beans-hint]",
 		// An editor split, and in it a text editor and the lines it moves by
 		// style.top as it scrolls.
@@ -50,6 +55,7 @@ const DOM = {
 		headerExpanded: (header: string) => `${header}?.parentElement.offsetHeight > ${header}?.offsetHeight`,
 		tabName: "#theia-main-content-panel .lm-TabBar-tab .lm-TabBar-tabLabel",
 		paletteRow: ".quick-input-widget .monaco-list-row",
+		paletteRows: ".quick-input-widget .monaco-list-rows",
 		sidebarItems: "#theia-left-side-panel :is(.theia-TreeNode, .theia-view-container-part-header)[data-beans-hint]",
 		// The editor shown in each split of the main area.
 		editorSplit: "#theia-main-content-panel > .lm-DockPanel-widget:not(.lm-mod-hidden)",
@@ -238,105 +244,223 @@ describe(`Beans in a real ${dom.name}`, () => {
 		await editor.evaluate("new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))");
 	}
 
-	const SCROLL_KEY = { key: "8", code: "Digit8", keyCode: 56, ctrl: true, alt: true };
-	const SPLIT_KEY = { key: "7", code: "Digit7", keyCode: 55, ctrl: true, alt: true };
-
 	it("scrolls the focused document most of a screen with beans.scroll", async () => {
-		const hint = await editor.waitFor<string>(rowHint("long.txt"), "the long.txt row");
-		editor.setKeybindings([
-			{ key: "ctrl+alt+9", command: "beans.pick", args: hint },
-			{ key: "ctrl+alt+8", command: "beans.scroll", args: "down" },
-			{ key: "ctrl+alt+7", command: "workbench.action.splitEditorRight" },
-		]);
-		await pressUntil(
-			{ key: "9", code: "Digit9", keyCode: 57, ctrl: true, alt: true },
-			`${tabOpen("long.txt")} && !!document.querySelector(${JSON.stringify(dom.editorLine)})`,
-			"long.txt to open",
-		);
-		await markFocus();
+		await openOnly(editor, "long.txt");
+		await markFocus(editor);
 		const before = await editor.evaluate<number[]>(splitScrolls);
 		expect(before).toHaveLength(1);
 
 		await editor.press(SCROLL_KEY);
-		const after = await settledScrolls(before);
-		const { height, lineHeight } = await editor.evaluate<{ height: number; lineHeight: number }>(`({
-			height: document.querySelector(${JSON.stringify(dom.textEditor)}).getBoundingClientRect().height,
-			lineHeight: document.querySelector(${JSON.stringify(dom.editorLine)}).getBoundingClientRect().height,
-		})`);
+		const after = await settledScrolls(editor, before);
+		const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
 		// 80% of the editor, in whole lines.
 		const moved = (after[0] ?? 0) - (before[0] ?? 0);
 		expect(moved).toBeGreaterThan(0.8 * height - lineHeight - 1);
 		expect(moved).toBeLessThan(0.8 * height + 1);
-		expect(await focusKept()).toBe(true);
+		expect(await focusKept(editor)).toBe(true);
 	});
 
 	it("scrolls the left and right splits without moving the focus", async () => {
-		await pressUntil(SPLIT_KEY, `(${splitScrolls}).length === 2`, "the editor to split");
+		await openOnly(editor, "long.txt");
+		await pressUntil(editor, SPLIT_KEY, `(${splitScrolls}).length === 2`, "the editor to split");
 		await editor.waitFor(
 			`(${editorSplits}).every((split) => split.querySelector(${JSON.stringify(dom.editorLine)}))`,
 			"both splits to show their lines",
 		);
-		await markFocus();
+		await markFocus(editor);
 		for (const [side, index] of [
 			["left", 0],
 			["right", 1],
 		] as const) {
 			const before = await editor.evaluate<number[]>(splitScrolls);
-			await sendScroll(`down--${side}`);
-			const after = await settledScrolls(before);
+			await sendScroll(editor, { direction: "down", hint: "", place: side });
+			const after = await settledScrolls(editor, before);
 			expect(after[index], `the ${side} split`).toBeGreaterThan(before[index] ?? 0);
 			expect(after[1 - index], `the split that isn't ${side}`).toBe(before[1 - index]);
 		}
-		expect(await focusKept()).toBe(true);
+		expect(await focusKept(editor)).toBe(true);
 	});
 
-	// Presses a key until the page shows what it should. The editor reloads
-	// its keybindings file by itself, a moment after it changes.
-	async function pressUntil(key: Key, expression: string, what: string): Promise<void> {
-		for (let attempt = 0; attempt < 5; attempt++) {
-			await editor.press(key);
-			const done = await editor.waitFor(expression, what, 3000).then(
-				() => true,
-				() => false,
-			);
-			if (done) return;
+	it("scrolls the Command Palette, not the document, while it's open", async () => {
+		await openOnly(editor, "long.txt");
+		// "|| 0" turns -0, which the page can't send back as a value, into 0.
+		const paletteScroll = `(-parseFloat(document.querySelector(${JSON.stringify(dom.paletteRows)})?.style.top || "0") || 0)`;
+		await editor.press(KEYS.F1);
+		await editor.waitFor(`document.querySelectorAll(${JSON.stringify(dom.paletteRow)}).length > 5`, "the palette");
+		try {
+			const documentScroll = await editor.evaluate<number[]>(splitScrolls);
+			const palette = await editor.evaluate<number>(paletteScroll);
+			// The palette keeps keys to itself, so this sends what Talon's
+			// bare "downer" does.
+			await sendScroll(editor, { direction: "down", hint: "", place: "document" });
+			await editor.waitFor(`${paletteScroll} > ${palette}`, "the palette to scroll");
+			expect(await editor.evaluate<number[]>(splitScrolls)).toEqual(documentScroll);
+		} finally {
+			await editor.press(KEYS.Escape);
 		}
-		throw new Error(`Timed out waiting for ${what}`);
-	}
-
-	// Sends a scroll request through the status bar channel, as the extension
-	// does: a keybinding passes one argument, and beans.scroll takes where to
-	// scroll as its third. Only the text changes, so the editor can still
-	// show the extension's next request.
-	async function sendScroll(request: string): Promise<void> {
-		await editor.evaluate(`(() => {
-			const channel = document.getElementById(window.__beansChannelId);
-			const walker = document.createTreeWalker(channel, NodeFilter.SHOW_TEXT);
-			for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-				if (node.data.includes("beans:")) node.data = "beans:" + Date.now() + ":scroll:" + ${JSON.stringify(request)};
-			}
-		})()`);
-	}
-
-	// Waits for the splits' scroll positions to change from these and stop
-	// changing: Beans corrects its first wheel event on the next frame.
-	async function settledScrolls(before: number[]): Promise<number[]> {
-		await editor.waitFor(`JSON.stringify(${splitScrolls}) !== ${JSON.stringify(JSON.stringify(before))}`, "a scroll");
-		let last = await editor.evaluate<number[]>(splitScrolls);
-		for (let still = 0; still < 3;) {
-			await new Promise((resolve) => setTimeout(resolve, 100));
-			const now = await editor.evaluate<number[]>(splitScrolls);
-			still = JSON.stringify(now) === JSON.stringify(last) ? still + 1 : 0;
-			last = now;
-		}
-		return last;
-	}
-
-	async function markFocus(): Promise<void> {
-		await editor.evaluate("window.__beansTestFocus = document.activeElement, true");
-	}
-
-	async function focusKept(): Promise<boolean> {
-		return editor.evaluate<boolean>("document.activeElement === window.__beansTestFocus");
-	}
+	});
 });
+
+// A file long enough that Monaco shifts its lines back past each 500,000px
+// (see scrollBy in src/page/scroll.ts). With 20px lines and the room to
+// scroll the last line to the top, the bottom is 2,000,200px down: just
+// past a shift, so a page up from there crosses it.
+const LONG_FILE_LINES = 100_011;
+
+describe(`Beans in a real ${dom.name}, in a file of ${LONG_FILE_LINES} lines`, () => {
+	let editor: Editor;
+	let workspace: string;
+
+	beforeAll(async () => {
+		workspace = fs.mkdtempSync(path.join(os.tmpdir(), "beans-long-"));
+		const lines = Array.from({ length: LONG_FILE_LINES }, (_, index) => `Line ${index + 1}`);
+		// No newline at the end, so the last line has text to look for.
+		fs.writeFileSync(path.join(workspace, "huge.txt"), lines.join("\n"));
+		editor = await startEditor(workspace);
+		editor.setSettings({ "editor.lineHeight": 20, "editor.scrollBeyondLastLine": true });
+	});
+
+	afterAll(async () => {
+		await editor?.close();
+		if (workspace) fs.rmSync(workspace, { recursive: true, force: true });
+	});
+
+	it("reaches the last and the first line, and moves 80% of a screen deep in the file", async () => {
+		await openOnly(editor, "huge.txt");
+		await editor.waitFor(`${editorSize}.lineHeight === 20`, "the 20px lines setting");
+		const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
+		const page = Math.floor((0.8 * height) / lineHeight);
+
+		await sendScroll(editor, { direction: "bottom", hint: "", place: "document" });
+		await editor.waitFor(lineShown(LONG_FILE_LINES), "the last line");
+		const bottom = await settledTopLine(editor);
+
+		await sendScroll(editor, { direction: "up", hint: "", place: "document" });
+		const up = await settledTopLine(editor, bottom);
+		expect(Math.abs(bottom - up - page), `${bottom} up to ${up}`).toBeLessThanOrEqual(1);
+
+		await sendScroll(editor, { direction: "down", hint: "", place: "document" });
+		const down = await settledTopLine(editor, up);
+		expect(Math.abs(down - up - page), `${up} down to ${down}`).toBeLessThanOrEqual(1);
+
+		await sendScroll(editor, { direction: "top", hint: "", place: "document" });
+		await editor.waitFor(lineShown(1), "the first line");
+	});
+});
+
+const SCROLL_KEY = { key: "8", code: "Digit8", keyCode: 56, ctrl: true, alt: true };
+const SPLIT_KEY = { key: "7", code: "Digit7", keyCode: 55, ctrl: true, alt: true };
+const CLOSE_KEY = { key: "6", code: "Digit6", keyCode: 54, ctrl: true, alt: true };
+const PICK_KEY = { key: "9", code: "Digit9", keyCode: 57, ctrl: true, alt: true };
+
+interface EditorSize {
+	height: number;
+	lineHeight: number;
+}
+
+// The height of the text editor, and of one line.
+const editorSize = `({
+	height: document.querySelector(${JSON.stringify(dom.textEditor)}).getBoundingClientRect().height,
+	lineHeight: document.querySelector(${JSON.stringify(dom.editorLine)}).getBoundingClientRect().height,
+})`;
+
+// The number of the first line wholly in sight, from its text, "Line 12".
+// Monaco draws spaces as no-break spaces, so this reads only the digits.
+const topLine = `(() => {
+	const top = document.querySelector(${JSON.stringify(dom.textEditor)}).getBoundingClientRect().top;
+	const lines = [...document.querySelectorAll(${JSON.stringify(dom.editorLine)})]
+		.map((line) => ({ top: line.getBoundingClientRect().top, number: Number(/\\d+/.exec(line.textContent)?.[0] ?? 0) }))
+		.filter((line) => line.top >= top - 1)
+		.sort((a, b) => a.top - b.top);
+	return lines[0]?.number ?? 0;
+})()`;
+
+const lineShown = (number: number) =>
+	`[...document.querySelectorAll(${JSON.stringify(dom.editorLine)})].some((line) => /\\d+/.exec(line.textContent)?.[0] === ${JSON.stringify(String(number))})`;
+
+/**
+ * Closes every editor, then opens this file of the workspace from its
+ * Explorer row, with the keybindings the scroll tests press.
+ */
+async function openOnly(editor: Editor, name: string): Promise<void> {
+	const hint = await editor.waitFor<string>(rowHint(name), `the ${name} row`);
+	editor.setKeybindings([
+		{ key: "ctrl+alt+9", command: "beans.pick", args: hint },
+		{ key: "ctrl+alt+8", command: "beans.scroll", args: "down" },
+		{ key: "ctrl+alt+7", command: "workbench.action.splitEditorRight" },
+		{ key: "ctrl+alt+6", command: "workbench.action.closeAllEditors" },
+	]);
+	await pressUntil(
+		editor,
+		CLOSE_KEY,
+		`!document.querySelector(${JSON.stringify(`${dom.editorSplit} ${dom.editorLine}`)})`,
+		"the editors to close",
+	);
+	await pressUntil(
+		editor,
+		PICK_KEY,
+		`${tabOpen(name)} && !!document.querySelector(${JSON.stringify(`${dom.editorSplit} ${dom.editorLine}`)})`,
+		`${name} to open`,
+	);
+}
+
+// Presses a key until the page shows what it should. The editor reloads
+// its keybindings file by itself, a moment after it changes.
+async function pressUntil(editor: Editor, key: Key, expression: string, what: string): Promise<void> {
+	for (let attempt = 0; attempt < 5; attempt++) {
+		await editor.press(key);
+		const done = await editor.waitFor(expression, what, 3000).then(
+			() => true,
+			() => false,
+		);
+		if (done) return;
+	}
+	throw new Error(`Timed out waiting for ${what}`);
+}
+
+// Sends a scroll request through the status bar channel, in the text the
+// extension writes there: a keybinding passes one argument, and
+// beans.scroll takes where to scroll as its third. Only the text changes,
+// so the editor can still show the extension's next request.
+async function sendScroll(editor: Editor, request: ScrollRequest): Promise<void> {
+	await editor.evaluate(`(() => {
+		const channel = document.getElementById(window.__beansChannelId);
+		const walker = document.createTreeWalker(channel, NodeFilter.SHOW_TEXT);
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			if (node.data.includes("beans:")) node.data = "beans:" + Date.now() + ":scroll:" + ${JSON.stringify(scrollChannelText(request))};
+		}
+	})()`);
+}
+
+// Waits for the splits' scroll positions to change from these and stop
+// changing: Beans corrects its first wheel event on the next frame.
+async function settledScrolls(editor: Editor, before: number[]): Promise<number[]> {
+	await editor.waitFor(`JSON.stringify(${splitScrolls}) !== ${JSON.stringify(JSON.stringify(before))}`, "a scroll");
+	return settled(editor, splitScrolls);
+}
+
+// The same for the first line in sight, which tells the scroll position in
+// a file of any length.
+async function settledTopLine(editor: Editor, before?: number): Promise<number> {
+	if (before !== undefined) await editor.waitFor(`${topLine} !== ${before}`, "a scroll");
+	return settled(editor, topLine);
+}
+
+async function settled<T>(editor: Editor, expression: string): Promise<T> {
+	let last = await editor.evaluate<T>(expression);
+	for (let still = 0; still < 3;) {
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		const now = await editor.evaluate<T>(expression);
+		still = JSON.stringify(now) === JSON.stringify(last) ? still + 1 : 0;
+		last = now;
+	}
+	return last;
+}
+
+async function markFocus(editor: Editor): Promise<void> {
+	await editor.evaluate("window.__beansTestFocus = document.activeElement, true");
+}
+
+async function focusKept(editor: Editor): Promise<boolean> {
+	return editor.evaluate<boolean>("document.activeElement === window.__beansTestFocus");
+}

@@ -32,6 +32,30 @@ export function scrollPlaceFrom(value: unknown): ScrollPlace | null {
 	return null;
 }
 
+/** A scroll as it travels from the extension host to the page. */
+export interface ScrollRequest {
+	direction: ScrollDirection;
+	/** A sidebar row's letters, or "". */
+	hint: string;
+	place: ScrollPlace;
+}
+
+/**
+ * A scroll request as the status bar channel carries it, "down-ab-bar".
+ * The hint keeps only its letters: quick pick numbers aren't sidebar rows.
+ */
+export function scrollChannelText({ direction, hint, place }: ScrollRequest): string {
+	return `${direction}-${hintFrom(hint).replace(/[0-9]/g, "")}-${place}`;
+}
+
+/** The scroll request in the channel's text, or null when it isn't one. */
+export function scrollRequestFrom(text: string): ScrollRequest | null {
+	const [direction, hint = "", place] = text.split("-");
+	const to = scrollDirectionFrom(direction);
+	const where = scrollPlaceFrom(place);
+	return to && where ? { direction: to, hint, place: where } : null;
+}
+
 /** The target in a command's arguments, or null when there isn't a usable one. */
 export function targetFrom(value: unknown): Target | null {
 	if (!isRecord(value) || !Array.isArray(value.items)) return null;
