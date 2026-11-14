@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- The Talon commands have new words, and the old ones are gone. The commands that act on rows start with "bean", so they don't clash with other Talon commands such as talon-gaze-ocr's "click": "click air" is now "bean air", "righty air" is "bean righty air", "open air" is "bean open air", and "file delete air" is "bean delete air". A few changed more than their prefix: "file open folder" is "bean reveal", "file create" and "folder new" are "bean new file" and "bean new folder". The resize commands say "bigger", "smaller" and "size": "bar bigger" for the sidebar, "right bar bigger" for the secondary sidebar, "panel smaller", "view air size 300". "upper" and "downer" are unchanged. The README has the full list. Pull beans-talon (`git pull` in its folder) to get the new words.
+- The Talon commands have new words, and the old ones are gone. The commands that act on rows start with "bean", so they don't clash with other Talon commands such as talon-gaze-ocr's "click": "click air" is now "bean air", "righty air" is "bean righty air", "open air" is "bean open air", and "file delete air" is "bean delete air". A few changed more than their prefix: "file open folder" is "bean reveal", "file create" and "folder new" are "bean new file" and "bean new folder". The resize commands say "bigger", "smaller" and "size": "bar bigger" for the sidebar, "right bar bigger" for the secondary sidebar, "panel smaller", "view air size 300". "upper" and "downer" are unchanged. The full list is in the beans-talon README. Pull beans-talon (`git pull` in its folder) to get the new words.
 
 ## 0.3.1
 
