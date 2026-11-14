@@ -58,7 +58,7 @@ export function setExpanded(target: Target, expanded: boolean): SetExpandedResul
 		if (state === null) continue;
 		const hint = hintOf(row);
 		if (row.matches(SELECTORS.paneHeader)) {
-			// "collapse C through H" means the rows, not the whole views between them.
+			// "bean collapse C past H" means the rows, not the whole views between them.
 			if (ends.has(hint) && state !== expanded) toggles.push({ row });
 			continue;
 		}
