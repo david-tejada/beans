@@ -7,16 +7,14 @@ export interface TabMemory<Tab> {
 	tabs: Map<Tab, RowKey>;
 }
 
-/** An open tab: its element, the split it's in, and what it shows, the most telling first. */
+/** An open tab: its element, the split it's in, and the name of what it shows. */
 export interface TabParts<Tab> {
 	tab: Tab;
 	/** An id for the tab's split that stays the same while the split is open. */
 	group: number;
-	/** The file's full path, or the editor's name when it shows no file. */
-	path: string | null;
-	/** The file's name. */
+	/** The file's name, or VS Code's name for another editor, which doesn't change while it's open. */
 	name: string | null;
-	/** The text on the tab. */
+	/** The text on the tab, for a tab without a name. */
 	label: string;
 }
 
@@ -32,7 +30,11 @@ export function tabHints<Tab>(
 	// VS Code reuses a tab's element for the next tab when one closes, so a
 	// tab is followed by what it shows, not by its element: rowKeys keeps an
 	// element's key only while it shows the same thing. The split's id
-	// makes the same file open in two splits two tabs.
+	// makes the same file open in two splits two tabs. Tabs with the same
+	// name in one split, such as a file and its diff, get "#2"; they can
+	// trade letters when one closes, since closing moves tabs into other
+	// elements. A file's full path would tell them apart, but VS Code only
+	// shows it once a preview tab is kept open, which would change its key.
 	const tabs = rowKeys(
 		open.map(({ tab, ...parts }) => ({ row: tab, base: tabBase(parts), index: null })),
 		memory.tabs,
@@ -49,6 +51,6 @@ export function tabHints<Tab>(
 }
 
 /** What a tab shows, as one string that starts with its split's id. */
-export function tabBase({ group, path, name, label }: Omit<TabParts<unknown>, "tab">): string {
-	return `${group}|${path || name || label}`;
+export function tabBase({ group, name, label }: Omit<TabParts<unknown>, "tab">): string {
+	return `${group}|${name || label}`;
 }

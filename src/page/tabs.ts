@@ -40,13 +40,9 @@ function tabParts(tab: HTMLElement): TabParts<HTMLElement> {
 		id = nextGroupId++;
 		groupIds.set(group, id);
 	}
-	// The hover text can add decorations after the path, as in the
-	// sidebars: "/a/notes.txt • Modified".
-	const path = tab.querySelector(SELECTORS.tabLabel)?.getAttribute(SELECTORS.tabPathAttribute)?.split(" • ")[0];
 	return {
 		tab,
 		group: id ?? 0,
-		path: path ?? null,
 		name: tab.getAttribute(SELECTORS.tabNameAttribute),
 		label: tab.textContent?.trim() ?? "",
 	};

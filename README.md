@@ -76,7 +76,7 @@ The Talon commands are in [`beans-talon/`](beans-talon), mirrored to the [beans-
 
 Every editor tab, in every split, gets letters in a pill before its name. Tab letters are apart from the sidebar's, so a tab can be A while a row is A too: "slot air" switches to the tab, "bean air" clicks the row. A tab keeps its letters for as long as it's open, whatever `beans.stableHints` says: closing or opening another tab doesn't change them, and a tab scrolled out of its tab strip still has them, so you can say them without scrolling to it. `beans.slot` activates the tab in the page, as a click would, so the strip scrolls to show it.
 
-The pill is as wide as its letters. Tabs sized to fit their name (`workbench.editor.tabSizing` `"fit"`, the default) grow by its width; with `"shrink"` or `"fixed"` they keep their width and show less of the name. A compact pinned tab (`workbench.editor.pinnedTabSizing` `"compact"`) shows its letters in place of its icon. `bean toggle` hides tab hints with the rest.
+The pill is as wide as its letters. Tabs sized to fit their name (`workbench.editor.tabSizing` `"fit"`, the default) show it between the file icon and the name, and grow by its width. Tabs that keep their width (`"shrink"` or `"fixed"`) show it in place of the file icon, so the name keeps its room; without a file icon theme there's no icon to replace, and the name shows a little less. A compact pinned tab (`workbench.editor.pinnedTabSizing` `"compact"`) shows its letters in place of its icon too. `bean toggle` hides tab hints with the rest.
 
 | Talon          | What it does                                                     |
 | -------------- | ---------------------------------------------------------------- |
@@ -85,7 +85,8 @@ The pill is as wide as its letters. Tabs sized to fit their name (`workbench.edi
 What doesn't work yet:
 
 - With `workbench.editor.showTabs` set to `"single"` or `"none"`, there are no tabs to hint.
-- Two tabs in one split that show the same file, such as a file and its diff, can trade letters when one of them closes. Tabs are told apart by their file's full path, so files that only share a name keep their own.
+- Beans tells tabs apart by their split and their file's name, so two tabs with the same name in one split, such as two `index.ts` files or a file and its diff, can trade letters when one of them closes.
+- Renaming a file, or saving it under a new name, can change its tab's letters.
 - A tab dragged to another split gets new letters there.
 - Floating editor windows get no hints.
 - Reloading the window forgets the letters, and so does changing a Beans setting.

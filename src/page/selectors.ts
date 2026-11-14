@@ -81,18 +81,19 @@ const VSCODE = {
 	// A split of the editor area, holding its own tabs and editors.
 	editorGroup: ".editor-group-container",
 	// A split's tab strip, which holds a tab for every editor open in it,
-	// scrolled into view or not. Typing in an editor changes nothing in it.
-	tabsContainer: ".tabs-container",
-	tab: ".tabs-container > .tab",
+	// scrolled into view or not. The terminal's tab list is a .tabs-container
+	// too, hence the split.
+	tabsContainer: ".editor-group-container .tabs-container",
+	tab: ".editor-group-container .tabs-container > .tab",
 	// A tab's label: its icon, then its name and description. A compact
 	// pinned tab (workbench.editor.pinnedTabSizing) has an empty name.
 	tabLabel: ".tab-label",
 	// Inside the label, the box holding the name, where the hint goes:
 	// the label's own ::before is the file icon.
 	tabHintPlace: ".tab-label > .monaco-icon-label-container",
-	// What a tab shows: the label's aria-label holds the file's full path
-	// (or the editor's name, as for Settings), the tab's attribute its name.
-	tabPathAttribute: "aria-label",
+	// The name of what a tab shows: a file's name, "Untitled-1", or a
+	// webview's id. It stays put while a preview tab is kept open and while
+	// an untitled file's first line, its title, is typed.
 	tabNameAttribute: "data-resource-name",
 };
 
@@ -173,7 +174,6 @@ const THEIA: typeof VSCODE = {
 	tab: NONE,
 	tabLabel: NONE,
 	tabHintPlace: NONE,
-	tabPathAttribute: "",
 	tabNameAttribute: "",
 };
 

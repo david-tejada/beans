@@ -35,8 +35,6 @@ function start(): void {
 	const update = () => {
 		scheduled = false;
 		lastRequest = readChannel(lastRequest);
-		// Tabs aren't held back: Theia, which holds rows back, has no tab hints.
-		tabMemory = labelTabs(tabMemory, TAB_HINTS);
 		const wait = settleUntil - performance.now();
 		if (wait > 0) {
 			clearTimeout(settleTimer);
@@ -44,6 +42,10 @@ function start(): void {
 			return;
 		}
 		memory = labelRows(memory);
+		// After the rows, which read the layout before writing: tabs only write,
+		// so a frame doesn't lay out twice. Only Theia holds relabeling back
+		// above, and it has no tab hints.
+		tabMemory = labelTabs(tabMemory, TAB_HINTS);
 	};
 	const schedule = () => {
 		if (scheduled) return;
@@ -53,8 +55,8 @@ function start(): void {
 
 	// Rows are recycled and repositioned through inline styles as lists
 	// scroll, so style and class changes are what signal "relabel".
-	// Mutations in the editor are ignored to keep typing cheap, except in
-	// its tab strips, which typing doesn't change.
+	// Mutations in the editor are ignored to keep typing cheap, and in its
+	// tab strips only tabs coming and going count (see isRelevant).
 	const observer = new MutationObserver((records) => {
 		if (!records.some(isRelevant)) return;
 		if (records.some(addsSwappedRow)) settleUntil = performance.now() + SETTLE_MS;
@@ -67,6 +69,20 @@ function start(): void {
 		attributes: true,
 		attributeFilter: ["style", "class", "aria-expanded"],
 	});
+	// A tab element VS Code reuses for another editor, as when tabs move,
+	// changes its name attribute. VS Code sets it again on every redraw, so
+	// only a new value counts.
+	const tabObserver = new MutationObserver((records) => {
+		if (records.some((record) => record.oldValue !== tabNameOf(record))) schedule();
+	});
+	if (TAB_HINTS && SELECTORS.tabNameAttribute) {
+		tabObserver.observe(document.documentElement, {
+			subtree: true,
+			attributes: true,
+			attributeFilter: [SELECTORS.tabNameAttribute],
+			attributeOldValue: true,
+		});
+	}
 	window.addEventListener("resize", schedule);
 	// Theia's trees scroll natively, which changes nothing the observer
 	// sees, so a scroll in a sidebar relabels too. Scroll events don't
@@ -80,6 +96,7 @@ function start(): void {
 	window.__beansStop?.();
 	window.__beansStop = () => {
 		observer.disconnect();
+		tabObserver.disconnect();
 		window.removeEventListener("resize", schedule);
 		document.removeEventListener("scroll", onScroll, { capture: true });
 		clearTimeout(settleTimer);
@@ -115,8 +132,18 @@ function isRelevant(record: MutationRecord): boolean {
 	if (!node) return false;
 	// Before the workbench has been built, any change may be a sidebar appearing.
 	if (!document.querySelector(SELECTORS.parts.join(","))) return true;
-	const watched = [...SELECTORS.parts, SELECTORS.quickInput, SELECTORS.statusBar, SELECTORS.tabsContainer].join(",");
+	// An editor's tab strip redraws every tab's label as an untitled file's
+	// name follows its first line, on each keystroke, so only tabs added to
+	// or removed from the strip count; the other observer sees a tab that
+	// shows another editor.
+	const tabStrip = node.closest(SELECTORS.tabsContainer);
+	if (tabStrip) return record.type === "childList" && record.target === tabStrip;
+	const watched = [...SELECTORS.parts, SELECTORS.quickInput, SELECTORS.statusBar].join(",");
 	return Boolean(node.closest(watched)) || node === document.body;
+}
+
+function tabNameOf(record: MutationRecord): string | null {
+	return record.target instanceof Element ? record.target.getAttribute(SELECTORS.tabNameAttribute) : null;
 }
 
 /** Runs a new request from the status bar channel. Returns the request's id. */

@@ -102,6 +102,24 @@ body:not(.beans-hidden)
 	> .tab-label::before {
 	display: none;
 }
+/* Tabs that keep their width (workbench.editor.tabSizing "shrink" or
+   "fixed") narrow to fit many tabs, and the pill beside the icon would leave
+   no room for the name, so it takes the icon's place there too. The file
+   icon is the label's ::before. */
+body:not(.beans-hidden)
+	.monaco-workbench
+	.part.editor
+	.tabs-container
+	> .tab.sizing-shrink[data-beans-tab]
+	> .tab-label::before,
+body:not(.beans-hidden)
+	.monaco-workbench
+	.part.editor
+	.tabs-container
+	> .tab.sizing-fixed[data-beans-tab]
+	> .tab-label::before {
+	display: none;
+}
 body:not(.beans-hidden)
 	.monaco-workbench
 	.part.editor

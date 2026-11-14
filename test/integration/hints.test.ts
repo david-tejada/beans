@@ -26,9 +26,13 @@ const DOM = {
 		tabs: {
 			group: ".editor-group-container",
 			activeGroup: ".editor-group-container.active",
-			tab: ".tabs-container > .tab",
+			tab: ".editor-group-container .tabs-container > .tab",
 			activeTab: ".tabs-container > .tab.active",
 			name: ".label-name",
+			// A preview tab's label, in italics.
+			preview: ".tab-label.italic",
+			// The strip's box, as wide as the part of it on screen.
+			strip: ".editor-group-container .tabs-container",
 		},
 		// The Activity Bar button that shows a view container, and the
 		// container's id.
@@ -232,37 +236,90 @@ describe(`Beans in a real ${dom.name}`, () => {
 	// Tab hints: VS Code only, for now.
 	const tabs = dom.tabs;
 
+	// Every test closes all the editors first, which frees their letters, so
+	// the letters start from A again.
 	it.skipIf(!tabs)("letters every editor tab, and a tab keeps its letters when another closes", async () => {
 		await openTabs(["a.txt", "b.txt", "c.txt"]);
-		const before = await tabHintsOf(["a.txt", "b.txt", "c.txt"]);
-		for (const hint of before) expect(hint).toMatch(/^[a-z]+$/);
-		expect(new Set(before).size).toBe(3);
+		// The tabs are in the Explorer's order, folders first: c.txt, a.txt, b.txt.
+		const names = await editor.evaluate<string[]>(tabNamesIn(0));
+		expect(names).toEqual(["c.txt", "a.txt", "b.txt"]);
+		expect(await editor.evaluate(tabHintsIn(0))).toEqual(["a", "b", "c"]);
 
-		await runCommand("beans.slot", before[0], `${activeTabName(0)} === "a.txt"`, "a.txt to show");
+		await runCommand("beans.slot", "a", `${activeTabName(0)} === "c.txt"`, "c.txt to show");
 		await runCommand(
 			"workbench.action.closeActiveEditor",
 			undefined,
-			`${tabHint("a.txt")} === null && ${tabHint("b.txt")} !== null`,
-			"a.txt to close",
+			`${tabHint("c.txt")} === null && ${tabHint("a.txt")} !== null`,
+			"c.txt to close",
 		);
-		// VS Code moves b.txt and c.txt into the tab elements to their left.
-		expect(await tabHintsOf(["b.txt", "c.txt"])).toEqual(before.slice(1));
+		// VS Code moves a.txt and b.txt into the tab elements to their left.
+		expect(await editor.evaluate(tabNamesIn(0))).toEqual(["a.txt", "b.txt"]);
+		expect(await editor.evaluate(tabHintsIn(0))).toEqual(["b", "c"]);
 	});
 
 	it.skipIf(!tabs)("letters the same file in two splits apart, and beans.slot switches to either", async () => {
 		await openTabs(["a.txt", "b.txt"]);
 		await runCommand("workbench.action.splitEditor", undefined, `${groupCount} >= 2`, "a second split");
-		const right = await editor.waitFor<string>(tabHint("b.txt", 1), "b.txt's tab in the second split");
-		const left = await editor.evaluate<string>(tabHint("b.txt", 0));
-		expect(right).toMatch(/^[a-z]+$/);
-		expect(left).toMatch(/^[a-z]+$/);
-		expect(right).not.toBe(left);
+		expect(await editor.waitFor<string>(tabHint("b.txt", 1), "b.txt's tab in the second split")).toBe("c");
+		expect(await tabHintsOf(["a.txt", "b.txt"])).toEqual(["a", "b"]);
 
 		// a.txt isn't the active tab of the first split, and the second has focus.
-		const a = await editor.evaluate<string>(tabHint("a.txt", 0));
-		await runCommand("beans.slot", a, `${activeGroup} === 0 && ${activeTabName(0)} === "a.txt"`, "a.txt to show");
-		await runCommand("beans.slot", right, `${activeGroup} === 1`, "the second split to take focus");
+		await runCommand("beans.slot", "a", `${activeGroup} === 0 && ${activeTabName(0)} === "a.txt"`, "a.txt to show");
+		await runCommand("beans.slot", "c", `${activeGroup} === 1`, "the second split to take focus");
 		expect(await editor.evaluate<string>(activeTabName(1))).toBe("b.txt");
+	});
+
+	it.skipIf(!tabs)("keeps a preview tab's letters when it's kept open", async () => {
+		await openTabs([]);
+		const row = await editor.waitFor<string>(rowHint("a.txt"), "the a.txt row");
+		// A click on a file opens it in a preview tab, which VS Code keeps
+		// open once you edit the file or double-click it.
+		await runCommand("beans.pick", row, `${tabHint("a.txt")} !== null && ${isPreview(0)}`, "a.txt's preview tab");
+		expect(await tabHintsOf(["a.txt"])).toEqual(["a"]);
+		await runCommand("workbench.action.keepEditor", undefined, `!(${isPreview(0)})`, "a.txt to be kept open");
+		await nextFrames();
+		expect(await tabHintsOf(["a.txt"])).toEqual(["a"]);
+	});
+
+	it.skipIf(!tabs)("keeps an untitled file's letters while its first line, its name, is typed", async () => {
+		await openTabs(["a.txt"]);
+		await runCommand("workbench.action.files.newUntitledFile", undefined, `${tabsIn(0)}.length === 2`, "a new file");
+		expect(await editor.evaluate(tabHintsIn(0))).toEqual(["a", "b"]);
+		try {
+			await editor.type("hello world");
+			await editor.waitFor(`${tabHint("hello world")} !== null`, "the untitled tab to take its first line's name");
+			await nextFrames();
+			expect(await editor.evaluate(tabHintsIn(0))).toEqual(["a", "b"]);
+		} finally {
+			await runCommand(
+				"workbench.action.revertAndCloseActiveEditor",
+				undefined,
+				`${tabsIn(0)}.length === 1`,
+				"the untitled file to close",
+			);
+		}
+	});
+
+	it.skipIf(!tabs)("switches with beans.slot to a tab scrolled out of the tab strip", async () => {
+		await openTabs([]);
+		// Empty untitled files, enough to overflow the strip; they close without asking.
+		for (let count = 1; count <= 20; count++) {
+			await runCommand(
+				"workbench.action.files.newUntitledFile",
+				undefined,
+				`${tabsIn(0)}.length >= ${count}`,
+				`untitled file ${count}`,
+			);
+		}
+		await editor.waitFor(`${tabsIn(0)}.every((tab) => tab.hasAttribute("data-beans-tab"))`, "every tab's letters");
+		expect(await editor.evaluate(`${tabsIn(0)}[0].getAttribute("data-beans-tab")`)).toBe("a");
+		expect(await editor.evaluate(isOutOfStrip(0))).toBe(true);
+
+		const first = await editor.evaluate<string>(
+			`${tabsIn(0)}[0].querySelector(${JSON.stringify(tabs?.name)}).textContent.trim()`,
+		);
+		await runCommand("beans.slot", "a", `${activeTabName(0)} === ${JSON.stringify(first)}`, "the first tab to show");
+		expect(await editor.evaluate<string>(`${tabsIn(0)}[0].getAttribute("data-beans-tab")`)).toBe("a");
 	});
 
 	it.skipIf(!tabs)("draws no tab hints with beans.tabHints off", async () => {
@@ -289,6 +346,20 @@ describe(`Beans in a real ${dom.name}`, () => {
 	const activeTabName = (group: number) =>
 		`(document.querySelectorAll(${JSON.stringify(tabs?.group)})[${group}]?.querySelector(${JSON.stringify(`${tabs?.activeTab} ${tabs?.name}`)})?.textContent?.trim() ?? null)`;
 
+	const tabNamesIn = (group: number) =>
+		`${tabsIn(group)}.map((tab) => tab.querySelector(${JSON.stringify(tabs?.name)})?.textContent?.trim())`;
+	const tabHintsIn = (group: number) => `${tabsIn(group)}.map((tab) => tab.getAttribute("data-beans-tab"))`;
+	// Whether the first split's tab at this place is a preview, shown in italics.
+	const isPreview = (place: number) => `!!${tabsIn(0)}[${place}]?.querySelector(${JSON.stringify(tabs?.preview)})`;
+	// Whether the first split's tab at this place is scrolled out of its strip.
+	const isOutOfStrip = (place: number) => `(() => {
+		const tab = ${tabsIn(0)}[${place}].getBoundingClientRect();
+		const strip = document.querySelector(${JSON.stringify(tabs?.strip)}).getBoundingClientRect();
+		return tab.right <= strip.left || tab.left >= strip.right;
+	})()`;
+	const nextFrames = () =>
+		editor.evaluate("new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))");
+
 	async function tabHintsOf(names: string[]): Promise<(string | null)[]> {
 		return Promise.all(names.map((name) => editor.evaluate<string | null>(tabHint(name))));
 	}
@@ -302,6 +373,9 @@ describe(`Beans in a real ${dom.name}`, () => {
 			`${groupCount} === 1 && ${tabsIn(0)}.length === 0`,
 			"no editors open",
 		);
+		// Beans relabels on the next frame, which frees the closed tabs' letters.
+		await nextFrames();
+		if (names.length === 0) return;
 		const dir = await editor.waitFor<string>(rowHint("dir"), "the dir row");
 		await setDirExpanded(dir, true);
 		const hints = await Promise.all(names.map((name) => editor.waitFor<string>(rowHint(name), `the ${name} row`)));
@@ -312,20 +386,31 @@ describe(`Beans in a real ${dom.name}`, () => {
 
 	// Runs a command through a keybinding, as Talon would, until the
 	// expression holds. Each command and arguments gets its own key, so a
-	// press can't reach a binding the editor hasn't reloaded yet.
+	// press can't reach a binding the editor hasn't reloaded yet: Ctrl+Alt
+	// and a digit, then a letter.
 	const bindings: Keybinding[] = [];
+	const KEY_NAMES = "0123456789abcdefghijklmnopqrstuvwxyz";
 	async function runCommand(command: string, args: unknown, until: string, what: string): Promise<void> {
-		let digit = bindings.findIndex(
+		let index = bindings.findIndex(
 			(binding) => binding.command === command && JSON.stringify(binding.args) === JSON.stringify(args),
 		);
-		if (digit === -1) {
-			digit = bindings.length;
-			if (digit > 9) throw new Error("runCommand ran out of keys");
-			bindings.push({ key: `ctrl+alt+${digit}`, command, args });
+		if (index === -1) {
+			index = bindings.length;
+			if (index >= KEY_NAMES.length) throw new Error("runCommand ran out of keys");
+			bindings.push({ key: `ctrl+alt+${KEY_NAMES[index]}`, command, args });
 			editor.setKeybindings(bindings);
 		}
+		const name = KEY_NAMES[index]!;
+		const isDigit = index < 10;
+		const key = {
+			key: name,
+			code: isDigit ? `Digit${name}` : `Key${name.toUpperCase()}`,
+			keyCode: name.toUpperCase().charCodeAt(0),
+			ctrl: true,
+			alt: true,
+		};
 		for (let attempt = 0; attempt < 5; attempt++) {
-			await editor.press({ key: String(digit), code: `Digit${digit}`, keyCode: 48 + digit, ctrl: true, alt: true });
+			await editor.press(key);
 			const done = await editor.waitFor(until, what, 3000).then(
 				() => true,
 				() => false,
