@@ -9,8 +9,7 @@ bean <number_small>: user.run_rpc_command("beans.pick", number_small)
 bean toggle: user.run_rpc_command("beans.toggle")
 
 # Right-clicks a row, opening its context menu. Community's plain "righty"
-# right-clicks at the mouse, so without the prefix "righty air" could be
-# heard as that click followed by the letter A.
+# right-clicks at the mouse; the prefix keeps the two apart.
 bean righty <user.beans_hint>: user.beans_right_click(beans_hint)
 
 # Scrolls the open Command Palette, else the document in the focused editor
