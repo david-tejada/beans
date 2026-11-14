@@ -5,6 +5,8 @@ mod = Module()
 # Resize targets that are parts of the window; anything else is a hint.
 PARTS = {"sidebar", "secondary", "panel"}
 
+mod.list("beans_scroll_place", desc="Where upper and downer scroll: an editor split or the sidebar")
+
 
 @mod.capture(rule="<user.letters>")
 def beans_hint(m) -> str:

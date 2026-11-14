@@ -13,12 +13,19 @@ bean toggle: user.run_rpc_command("beans.toggle")
 # heard as that click followed by the letter A.
 bean righty <user.beans_hint>: user.beans_right_click(beans_hint)
 
-# Scrolls the open Command Palette, else the tallest sidebar list. With a
-# hint, scrolls the sidebar list holding that row. Same words as Rango.
-upper [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "up", beans_hint or "")
-downer [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "down", beans_hint or "")
-upper all [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "top", beans_hint or "")
-downer all [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "bottom", beans_hint or "")
+# Scrolls the open Command Palette, else the document in the focused editor
+# split. With a hint, scrolls the sidebar list holding that row. "left" and
+# "right" scroll that editor split without moving the focus; "bar" or "side"
+# the open Command Palette, else the tallest sidebar list (see
+# beans_scroll_place.talon-list). Same words as Rango.
+upper [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "up", beans_hint or "", "")
+downer [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "down", beans_hint or "", "")
+upper all [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "top", beans_hint or "", "")
+downer all [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "bottom", beans_hint or "", "")
+upper {user.beans_scroll_place}: user.run_rpc_command("beans.scroll", "up", "", beans_scroll_place)
+downer {user.beans_scroll_place}: user.run_rpc_command("beans.scroll", "down", "", beans_scroll_place)
+upper all {user.beans_scroll_place}: user.run_rpc_command("beans.scroll", "top", "", beans_scroll_place)
+downer all {user.beans_scroll_place}: user.run_rpc_command("beans.scroll", "bottom", "", beans_scroll_place)
 
 # Target commands. A target is hints and ranges joined with "and", like
 # "harp past ink and made".

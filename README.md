@@ -4,7 +4,7 @@ Beans puts letter hints on every row of the VS Code sidebars (Explorer, Search, 
 
 ![Hints on the Explorer rows](media/screenshot.png)
 
-Beyond clicking, you can right-click a row, scroll a list, resize the sidebars and the panel, and act on files and folders by hint: "bean open bat and cap", "bean move harp past ink to drum", "bean stage air".
+Beyond clicking, you can right-click a row, scroll a document or a list, resize the sidebars and the panel, and act on files and folders by hint: "bean open bat and cap", "bean move harp past ink to drum", "bean stage air".
 
 I use Beans every day on macOS; Windows and Linux should work but I haven't tried them.
 
@@ -52,7 +52,7 @@ The Talon commands are in [`beans-talon/`](beans-talon), mirrored to the [beans-
 - **Pick** (`beans.pick`): "bean <letters>" clicks a sidebar row, "bean <number>" a Command Palette row.
 - **Right-click** (`beans.rowPoint`): "bean righty <letters>" right-clicks a sidebar row or view header, opening its context menu. On macOS, VS Code opens the menu at the real cursor, so a fake event can't place it: `beans.rowPoint` returns where the row is, as fractions of the window's width and height (title bar included, when VS Code uses the native one), and Talon moves the mouse there and right-clicks. The mouse stays on the row. The menu is native, so it has no hints: choose an item with the arrow keys, or type the start of its name, then press Enter.
 - **Toggle** (`beans.toggle`): "bean toggle" shows or hides the hints.
-- **Scroll** (`beans.scroll`, takes `"up"`, `"down"`, `"top"` or `"bottom"`, and optionally a hint): "downer", "upper bill", "upper all" (top), "downer all" (bottom), the same words as Rango. It scrolls the open quick pick, else the tallest sidebar list, or the list holding that row.
+- **Scroll** (`beans.scroll`, takes `"up"`, `"down"`, `"top"` or `"bottom"`, then a hint or `""`, then where: `""`, `"left"`, `"right"` or `"bar"`): the same words as Rango. "downer" and "upper" scroll the document in the focused editor split, even while the focus is in the sidebar or the terminal; "downer left" and "downer right" the left or right split, without moving the focus; "downer bar" (or "downer side", since "bar" can sound like "bat") the tallest sidebar list; "downer bill" the sidebar list holding that row. "upper all" and "downer all" go to the top and the bottom, followed by any of those. An open quick pick takes every scroll but "left" and "right". A scroll moves 80% of the view, keeping at least one row or line in sight. The page sends wheel events, so it moves diff editors, notebooks and Settings too, but not webview editors such as the Markdown preview or images; with `editor.smoothScrolling` or `workbench.list.smoothScrolling` on, the distance can be a little off. The left split is the one furthest left, the right split the one furthest right: with three side by side, the outer two. When two are stacked on that side, it's the one level with the focused split, else the top one.
 - **Inject** (`beans.inject`) runs the hint script again in every window. Beans also runs it when a command reaches a window that doesn't have the script, and asks you to say the command again.
 - **Relaunch** (`beans.relaunch`) quits VS Code and starts it again with the debug pipe, held by `cdp-relay.js`. The relay gives up after two minutes if the quit is canceled, and is replaced by the next Relaunch.
 

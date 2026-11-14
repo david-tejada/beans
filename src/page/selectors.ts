@@ -76,6 +76,16 @@ const VSCODE = {
 	splitViewView: ".split-view-view",
 	// Editors draw their own sashes (the find widget's, for one).
 	editor: ".monaco-editor",
+	// Monaco's lines, which it moves by style.top as it scrolls, and one line.
+	editorLines: ".lines-content",
+	editorLine: ".view-line",
+	// An editor split (VS Code's editor group), and the one with the focus,
+	// or the one that had it last while the focus is in a sidebar.
+	editorGroup: ".editor-group-container",
+	activeEditorGroup: ".editor-group-container.active",
+	// The editor area holding the splits: the main one, or the modal one
+	// VS Code opens Settings in.
+	editorPart: ".part.editor",
 	// The status bar, watched for requests.
 	statusBar: ".part.statusbar",
 };
@@ -150,6 +160,14 @@ const THEIA: typeof VSCODE = {
 	pane: ".theia-view-container-part",
 	splitViewView: NONE,
 	editor: ".monaco-editor",
+	editorLines: ".lines-content",
+	editorLine: ".view-line",
+	// The editor shown in each split of the main area; the others are hidden.
+	editorGroup: "#theia-main-content-panel > .lm-DockPanel-widget:not(.lm-mod-hidden)",
+	// Theia marks the tab bar of the split with the focus, or that had it
+	// last; the split sits right below it.
+	activeEditorGroup: "#theia-main-content-panel > .lm-TabBar.theia-tabBar-active",
+	editorPart: "#theia-main-content-panel",
 	statusBar: "#theia-statusBar",
 };
 

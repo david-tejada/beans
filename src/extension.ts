@@ -7,7 +7,7 @@ import { createOutput } from "./output";
 import { userDataDir } from "./paths";
 import { relaunch, reportError, setDevelopment } from "./relaunch";
 import { setUserDataDir } from "./relay-connection";
-import { hintFrom, isRecord, resizeRequestFrom, scrollDirectionFrom } from "./requests";
+import { hintFrom, isRecord, resizeRequestFrom, scrollDirectionFrom, scrollPlaceFrom } from "./requests";
 import { toHintSpacing } from "./hint-spacing";
 import type { PageSettings, ResizeRequest } from "./shared/types";
 import { registerTargetCommands } from "./target-commands";
@@ -44,10 +44,15 @@ export function activate(context: vscode.ExtensionContext): void {
 		vscode.commands.registerCommand("beans.rowPoint", rowPoint),
 		vscode.commands.registerCommand("beans.toggle", () => send(channel, "toggle")),
 		// direction: "up", "down", "top" or "bottom". letters: optional hint
-		// of a row in the list to scroll.
-		vscode.commands.registerCommand("beans.scroll", (direction: unknown, letters: unknown) => {
-			const where = scrollDirectionFrom(direction);
-			if (where) send(channel, "scroll", `${where}-${hintFrom(letters).replace(/[0-9]/g, "")}`);
+		// of a row in the list to scroll. where, without a hint: "left" or
+		// "right" for that editor split, "bar" for the sidebar, or nothing
+		// for the focused document. It has its own argument, since "up" is
+		// a hint too.
+		vscode.commands.registerCommand("beans.scroll", (direction: unknown, letters: unknown, where: unknown) => {
+			const to = scrollDirectionFrom(direction);
+			const place = scrollPlaceFrom(where);
+			if (!place) warn(`there's no "${String(where)}" to scroll`);
+			else if (to) send(channel, "scroll", `${to}-${hintFrom(letters).replace(/[0-9]/g, "")}-${place}`);
 		}),
 		vscode.commands.registerCommand("beans.resize", async (request: unknown) => {
 			const parsed = resizeRequestFrom(request);

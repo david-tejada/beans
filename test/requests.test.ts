@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
-import { hintFrom, resizeRequestFrom, scrollDirectionFrom, targetFrom } from "../src/requests";
+import { hintFrom, resizeRequestFrom, scrollDirectionFrom, scrollPlaceFrom, targetFrom } from "../src/requests";
 
 describe("hintFrom", () => {
 	test("keeps letters and digits, lower case", () => {
@@ -21,6 +21,27 @@ describe("scrollDirectionFrom", () => {
 		expect(scrollDirectionFrom("bottom")).toBe("bottom");
 		expect(scrollDirectionFrom("sideways")).toBeNull();
 		expect(scrollDirectionFrom(undefined)).toBeNull();
+	});
+});
+
+describe("scrollPlaceFrom", () => {
+	test("is the document when nothing is named", () => {
+		expect(scrollPlaceFrom("")).toBe("document");
+		expect(scrollPlaceFrom(undefined)).toBe("document");
+		expect(scrollPlaceFrom(null)).toBe("document");
+		expect(scrollPlaceFrom("document")).toBe("document");
+	});
+
+	test("accepts the splits and the sidebar", () => {
+		expect(scrollPlaceFrom("left")).toBe("left");
+		expect(scrollPlaceFrom("right")).toBe("right");
+		expect(scrollPlaceFrom("bar")).toBe("bar");
+	});
+
+	test("is null for anything else", () => {
+		expect(scrollPlaceFrom("side")).toBeNull();
+		expect(scrollPlaceFrom("up")).toBeNull();
+		expect(scrollPlaceFrom(2)).toBeNull();
 	});
 });
 

@@ -41,14 +41,23 @@ A **hint** is the letters on a row, spoken with your community alphabet words. A
 
 ### Scrolling
 
-These scroll the open Command Palette, or else the tallest sidebar list. With a hint, they scroll the sidebar list holding that row.
+On their own, these scroll the document in the editor split you're in, even while the focus is in the sidebar or the terminal. While the Command Palette is open, they scroll it instead. A scroll moves 80% of the view, so a fifth of it, and at least one line, stays in sight.
 
 | Say | What it does |
 | --- | --- |
-| `upper [<hint>]` | Scroll up |
-| `downer [<hint>]` | Scroll down |
-| `upper all [<hint>]` | Scroll to the top |
-| `downer all [<hint>]` | Scroll to the bottom |
+| `upper` / `downer` | Scroll the document up or down |
+| `upper left` / `downer left` | Scroll the left editor split, without moving the focus |
+| `upper right` / `downer right` | Scroll the right editor split, without moving the focus |
+| `upper bar` / `downer bar` | Scroll the open Command Palette, or else the tallest sidebar list |
+| `upper side` / `downer side` | The same as `bar` |
+| `upper <hint>` / `downer <hint>` | Scroll the open Command Palette, or else the sidebar list holding that row |
+| `upper all …` / `downer all …` | Scroll to the top or the bottom, followed by nothing, `left`, `right`, `bar`, `side` or a hint |
+
+The left split is the one furthest to the left, and the right split the one furthest to the right, wherever the focus is: with three splits side by side, they're the outer two. When two are stacked on that side, it's the one level with the split you're in, else the top one. With one split, both words scroll it.
+
+`side` is there because `downer bar` can sound like `downer bat` to Talon, for people whose word for B is "bat". To change these words, edit `beans_scroll_place.talon-list`.
+
+Webview editors, such as the Markdown preview and images, can't be scrolled. With VS Code's `editor.smoothScrolling` or `workbench.list.smoothScrolling` on, a scroll can go a little more or less far than that.
 
 ### Targets
 

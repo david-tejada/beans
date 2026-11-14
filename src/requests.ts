@@ -19,6 +19,19 @@ export function scrollDirectionFrom(value: unknown): ScrollDirection | null {
 	return SCROLL_DIRECTIONS.find((direction) => direction === value) ?? null;
 }
 
+/**
+ * What a scroll moves when it names no hint: the "document" in the focused
+ * split, the "left" or "right" split, or the sidebar ("bar").
+ */
+export type ScrollPlace = "document" | "left" | "right" | "bar";
+
+/** Where to scroll, from Talon's word for it; nothing means the document. Null for a word Beans doesn't know. */
+export function scrollPlaceFrom(value: unknown): ScrollPlace | null {
+	if (value === undefined || value === null || value === "" || value === "document") return "document";
+	if (value === "left" || value === "right" || value === "bar") return value;
+	return null;
+}
+
 /** The target in a command's arguments, or null when there isn't a usable one. */
 export function targetFrom(value: unknown): Target | null {
 	if (!isRecord(value) || !Array.isArray(value.items)) return null;
