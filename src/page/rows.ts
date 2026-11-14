@@ -73,7 +73,10 @@ export function sidebarRowWithHint(hint: string): HTMLElement | null {
 export function findRow(hint: string): HTMLElement | null {
 	const containers = isNumberHint(hint) ? [openQuickInput()].filter((c): c is HTMLElement => c !== null) : sidebars();
 	const row = containers.map((container) => rowWithHint(container, hint)).find((r) => r !== null) ?? null;
-	if (!row) console.log(hint === SELECTION_HINT ? "[beans] nothing is selected" : `[beans] no row with hint "${hint}"`);
+	if (!row)
+		console.log(
+			hint === SELECTION_HINT ? "[beans] no selected row is on screen" : `[beans] no row with hint "${hint}"`,
+		);
 	return row;
 }
 

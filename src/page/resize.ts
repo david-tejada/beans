@@ -59,7 +59,10 @@ async function resizeTarget(target: ResizeTarget): Promise<ResizeFound> {
 	const row = sidebarRowWithHint(target.hint);
 	if (!row)
 		return {
-			problem: target.hint === SELECTION_HINT ? "nothing is selected" : `no row with hint ${target.hint.toUpperCase()}`,
+			problem:
+				target.hint === SELECTION_HINT
+					? "no selected row is on screen"
+					: `no row with hint ${target.hint.toUpperCase()}`,
 		};
 	const pane = row.closest<HTMLElement>(SELECTORS.pane);
 	const name = pane?.querySelector(SELECTORS.paneTitle)?.textContent || "view";

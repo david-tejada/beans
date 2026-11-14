@@ -3,6 +3,7 @@ import type { ResolveResult, SetExpandedResult, Target } from "../shared/types";
 import { clickElement, clickRow, nextFrame } from "./click";
 import { expandedState, hintOf, rowPath, selectedRows, sidebars, viewOf, visibleRows } from "./rows";
 import { placeRow, rowIndex, scrollPosition } from "./scroll";
+import { selectionMayRunPast } from "./selection-may-run-past";
 import { SELECTORS } from "./selectors";
 
 /**
@@ -124,11 +125,11 @@ function clickStickyTwistie(row: HTMLElement, twistie: HTMLElement): void {
 /**
  * The sidebar rows a target names, in on-screen order, the hints said
  * aloud, on their own or as a range's end (ends), and the hints that
- * aren't on screen (missing). "this" (SELECTION_HINT) names every selected
- * row, and the first one as a range's end. It's missing when nothing is
- * selected, and left out when the selection may run past the screen
- * (selectionRunsPast): acting on the part that shows could delete or move
- * less than the user sees as selected.
+ * aren't on screen (missing). "this" (SELECTION_HINT) names the selected
+ * rows on screen, and the first of them as a range's end; it's missing
+ * when none is on screen. selectionRunsPast says the selection named by
+ * "this" may go on past the screen, for the extension to decide whether
+ * the rows that show will do.
  */
 function targetRows(target: Target): {
 	rows: HTMLElement[];
@@ -148,8 +149,8 @@ function targetRows(target: Target): {
 	let selectionRunsPast = false;
 	for (const item of target.items) {
 		if ("hint" in item && item.hint === SELECTION_HINT && selection.list && selected.length) {
-			if (runsPast(selection.list, selection.rows)) selectionRunsPast = true;
-			else for (const i of selected) chosen.add(i);
+			selectionRunsPast = listSelectionMayRunPast(selection.list, selection.rows);
+			for (const i of selected) chosen.add(i);
 			continue;
 		}
 		const said: [string, string] = "hint" in item ? [item.hint, item.hint] : [item.from, item.to];
@@ -168,31 +169,25 @@ function targetRows(target: Target): {
 	return { rows: chosenRows, ends, missing: [...new Set(missing)], selectionRunsPast };
 }
 
-/**
- * Whether a list's selection may go on past its selected rows on screen
- * (shown). VS Code renders only the rows on screen, Theia a screen's worth
- * more on each side. A selected row that's rendered but hidden, under
- * sticky scroll or past an edge, says it does; so does a selected row at
- * the edge of what's rendered when the list scrolls on past it, unless
- * VS Code says only one row is selected. Rows selected one by one, far
- * apart, can't be told from the DOM.
- */
-function runsPast(list: HTMLElement, shown: HTMLElement[]): boolean {
-	if (list.matches(SELECTORS.singleSelection)) return false;
-	if (list.matches(SELECTORS.multipleSelection) && shown.length === 1) return true;
+/** Whether a list's selection may go on past its selected rows on screen (shown), from what its DOM says. */
+function listSelectionMayRunPast(list: HTMLElement, shown: HTMLElement[]): boolean {
 	const rendered = [...list.querySelectorAll<HTMLElement>(SELECTORS.row)]
 		.filter((row) => !row.matches(SELECTORS.stickyRow))
 		.toSorted((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
-	if (rendered.some((row) => row.matches(SELECTORS.selectedRow) && !shown.includes(row))) return true;
-	const first = rendered[0];
-	const last = rendered.at(-1);
-	return (
-		(first !== undefined && shown.includes(first) && canScroll(list, "up")) ||
-		(last !== undefined && shown.includes(last) && canScroll(list, "down"))
-	);
+	return selectionMayRunPast({
+		rows: rendered.map((row) => ({
+			selected: row.matches(SELECTORS.selectedRow),
+			shown: shown.includes(row),
+			focused: row.matches(SELECTORS.focusedRow),
+		})),
+		single: list.matches(SELECTORS.singleSelection),
+		multiple: list.matches(SELECTORS.multipleSelection),
+		moreAbove: canScroll(list, "up"),
+		moreBelow: canScroll(list, "down"),
+	});
 }
 
-/** Whether a list has rows above, or below, the ones it shows. */
+/** Whether a list has rows above, or below, the ones it renders. */
 function canScroll(list: HTMLElement, direction: "up" | "down"): boolean {
 	const scroller = list.matches(SELECTORS.nativeScroller)
 		? list

@@ -29,9 +29,9 @@ export interface ResolveResult {
 	items: ResolvedItem[];
 	/** Hints of rows that aren't files. */
 	skipped: string[];
-	/** Hints that aren't on screen, and "this" when nothing is selected. */
+	/** Hints that aren't on screen, and "this" when no selected row is. */
 	missing: string[];
-	/** Whether "this" was left out because the selection may run past the screen. */
+	/** Whether the selection "this" names may go on past the screen; its rows on screen are in the result. */
 	selectionRunsPast: boolean;
 }
 

@@ -26,6 +26,8 @@ const DOM = {
 		selectedRow: ".monaco-list-row.selected",
 		// What has the focus while typing in an editor.
 		editorInput: ".monaco-editor .native-edit-context, .monaco-editor textarea",
+		// A row in Open Editors, a sidebar list that isn't the Explorer's.
+		openEditorsRow: ".open-editors .monaco-list-row",
 		// The Activity Bar button that shows a view container, and the
 		// container's id.
 		containers: {
@@ -53,6 +55,7 @@ const DOM = {
 		fileRow: (name: string) => `#files .theia-FileStatNode[title$=${JSON.stringify(`/${name}`)}]`,
 		selectedRow: ".theia-TreeNode.theia-mod-selected",
 		editorInput: ".monaco-editor .native-edit-context, .monaco-editor textarea",
+		openEditorsRow: "#theia-open-editors-widget .theia-TreeNode",
 		containers: {
 			Explorer: { button: "#shell-tab-explorer-view-container", id: "explorer-view-container" },
 			Extensions: { button: "#shell-tab-vsx-extensions-view-container", id: "vsx-extensions-view-container" },
@@ -204,7 +207,7 @@ describe(`Beans in a real ${dom.name}`, () => {
 		}
 	});
 
-	it('resolves "this" to the selected rows, and says when nothing is selected', async () => {
+	it('resolves "this" to the selected rows, and says when none is on screen', async () => {
 		await clickUntilSelected("a.txt");
 		expect(await namesOfThis()).toEqual({ names: ["a.txt"], missing: [] });
 
@@ -231,6 +234,72 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(await editor.evaluate<unknown>(`window.__beans.rowPoint("this")`)).toBeNull();
 	});
 
+	it('resolves "this" alongside hints and as either end of a range', async () => {
+		await clickUntilSelected("b.txt");
+		const a = await fileItem("a.txt");
+		const b = await fileItem("b.txt");
+		expect(await namesOf([{ hint: a.hint }, { hint: "this" }])).toEqual(["a.txt", "b.txt"]);
+		// b is both said and selected, and shows up once.
+		expect(await namesOf([{ hint: b.hint }, { hint: "this" }])).toEqual(["b.txt"]);
+		expect(await namesOf([{ from: "this", to: a.hint }])).toEqual(["a.txt", "b.txt"]);
+		expect(await namesOf([{ from: a.hint, to: "this" }])).toEqual(["a.txt", "b.txt"]);
+
+		// With a and b selected, a range's end is the first of them.
+		await editor.evaluate(`window.__beans.select([${JSON.stringify(a)}])`);
+		expect(await namesOf([{ hint: b.hint }, { hint: "this" }])).toEqual(["a.txt", "b.txt"]);
+		expect(await namesOf([{ from: "this", to: a.hint }])).toEqual(["a.txt"]);
+	});
+
+	it('resolves "this" to the selection of the focused list when that isn\'t the Explorer', async () => {
+		await clickUntilSelected("a.txt");
+		const openEditorsRow = JSON.stringify(dom.openEditorsRow);
+		if (EDITOR_KIND === "vscode") {
+			// VS Code hides Open Editors; this command shows it and focuses it.
+			editor.setKeybindings([{ key: "ctrl+alt+8", command: "workbench.files.action.focusOpenEditorsView" }]);
+			let shown = false;
+			for (let attempt = 0; attempt < 5 && !shown; attempt++) {
+				await editor.press({ key: "8", code: "Digit8", keyCode: 56, ctrl: true, alt: true });
+				shown = await editor
+					.waitFor(`document.activeElement?.closest(".open-editors") != null`, "Open Editors' focus", 3000)
+					.then(
+						() => true,
+						() => false,
+					);
+			}
+			if (!shown) throw new Error("Open Editors didn't get the focus");
+		} else {
+			// Theia shows Open Editors collapsed. Clicking a row selects it and
+			// moves the focus to its editor, so the focus goes back to the tree.
+			const header = await editor.waitFor<string>(headerHint("Open Editors"), "the Open Editors header");
+			await editor.evaluate(`window.__beans.setExpanded(${target(header)}, true)`);
+			const selected = `!!document.querySelector(${openEditorsRow})?.matches(${JSON.stringify(dom.selectedRow)})`;
+			for (let attempt = 0; attempt < 5; attempt++) {
+				await editor.waitFor(`!!document.querySelector(${openEditorsRow})`, "a row in Open Editors");
+				await editor.click(dom.openEditorsRow);
+				const isSelected = await editor.waitFor(selected, "the Open Editors row to be selected", 2000).then(
+					() => true,
+					() => false,
+				);
+				if (isSelected) break;
+			}
+			await editor.evaluate(`document.querySelector("#theia-open-editors-widget").focus()`);
+		}
+		await editor.waitFor(
+			`[...document.querySelectorAll(${openEditorsRow})].some((row) => row.matches(${JSON.stringify(dom.selectedRow)}) && row.hasAttribute("data-beans-hint"))`,
+			"a selected row in Open Editors to get a hint",
+		);
+		const result = await editor.evaluate<ResolveResult>(`window.__beans.resolve(${target("this")})`);
+		expect({ ...result, items: result.items.map((item) => [path.basename(item.path), item.view]) }).toMatchObject({
+			items: [["a.txt", "openEditors"]],
+			missing: [],
+		});
+
+		if (EDITOR_KIND === "theia") {
+			const header = await editor.waitFor<string>(headerHint("Open Editors"), "the Open Editors header");
+			await editor.evaluate(`window.__beans.setExpanded(${target(header)}, false)`);
+		}
+	});
+
 	// Clicks an Explorer file's row with the mouse until it shows as
 	// selected: Theia can miss a click while it's still settling.
 	async function clickUntilSelected(name: string): Promise<void> {
@@ -253,6 +322,12 @@ describe(`Beans in a real ${dom.name}`, () => {
 		const hint = await editor.waitFor<string>(rowHint(name), `the ${name} row`);
 		const result = await editor.evaluate<ResolveResult>(`window.__beans.resolve(${target(hint)})`);
 		return { hint, path: result.items[0]!.path };
+	}
+
+	// The names of the files a target's items resolve to.
+	async function namesOf(items: object[]): Promise<string[]> {
+		const result = await editor.evaluate<ResolveResult>(`window.__beans.resolve(${JSON.stringify({ items })})`);
+		return result.items.map((item) => path.basename(item.path));
 	}
 
 	// The names of the files "this" resolves to, and what it reports missing.

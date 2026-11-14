@@ -60,9 +60,17 @@ The Talon commands are in [`beans-talon/`](beans-talon), mirrored to the [beans-
 
 Anywhere you say a hint, you can say "this" for the selected rows instead: "bean expand this", "bean move this to drum", "bean righty this", "view this bigger", "downer this". beans-talon sends the hint `"this"`, which no real hint can be.
 
-- **Which selection.** The sidebar list that has the keyboard focus. When the focus is elsewhere, such as in the editor, the Explorer's selection; else the first sidebar list that has one. A list that has the focus and nothing selected means nothing is selected, and Beans says so.
-- **Every row or the first.** In a target, "this" is every selected row. Where a command takes one row (pick, right-click, scroll, resize), and as the end of a range ("this past drum"), it's the first selected row. "bean this" clicks it, which leaves only that row selected.
-- **Only the rows on screen.** The sidebar lists only draw the rows on screen, so Beans can't see selected rows that are scrolled away. When it can tell the selection goes on past the screen, it leaves "this" alone and says so rather than act on part of it: scroll until the whole selection shows. It can tell when a selected row sits at the top or bottom edge of the list with more rows beyond it, or, in Theia, just past the edge, and in VS Code when only one of several selected rows shows. In VS Code that edge rule also stops a selection that happens to end on the last row showing. It can't tell when rows selected one by one, far apart, are scrolled away while others show; then "this" is the ones that show.
+- **Which selection.** The sidebar list that has the keyboard focus. When the focus is elsewhere, such as in the editor, the Explorer's selection; else the first sidebar list that has one. When the list has no selected row on screen, Beans says so (a target, right-click and resize do; "bean this" and "downer this" stay silent, as they do for a hint that isn't on screen).
+- **Every row or the first.** In a target, "this" is every selected row. Where a command takes one row (pick, right-click, scroll, resize, rename, new file, new folder, find in, a move's destination), and as the end of a range ("this past drum"), it's the first selected row. "bean this" clicks it, which leaves only that row selected.
+- **Only the rows on screen.** The sidebar lists only draw the rows on screen, so Beans can't see selected rows that are scrolled away. When it can tell the selection may go on past the screen, what happens depends on the command:
+
+  | Commands                                                                                       | When the selection may go on past the screen                                                            |
+  | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+  | delete, move (what's moved), discard, stage, unstage                                           | Beans does nothing and says why: these change files or Git, and would change only part of the selection |
+  | open, split, copy path, copy local, expand, collapse, parent, select, reveal, diff             | Beans uses the selected rows on screen, and says that's all it used                                     |
+  | rename, new file, new folder, find in, a move's destination, and everything that takes one row | Beans uses the first selected row, as always                                                            |
+
+  Beans can tell when a selected row sits at the top or bottom edge of the list with more rows beyond it, unless it's the row the keyboard is on (a Shift+arrow range ends there); in Theia, when a selected row is just past the edge; and in VS Code, when only one of several selected rows shows. It can't tell when rows selected one by one, far apart, are scrolled away while others show; then "this" is the ones that show.
 
 ### Resize commands
 

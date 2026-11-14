@@ -1,16 +1,11 @@
 import { describe, expect, test } from "vite-plus/test";
-import { hintFrom, resizeRequestFrom, scrollDirectionFrom, SELECTION_HINT, targetFrom } from "../src/requests";
+import { hintFrom, resizeRequestFrom, scrollDirectionFrom, targetFrom } from "../src/requests";
 
 describe("hintFrom", () => {
 	test("keeps letters and digits, lower case", () => {
 		expect(hintFrom("AB")).toBe("ab");
 		expect(hintFrom(" a-b 3 ")).toBe("ab3");
 		expect(hintFrom(12)).toBe("12");
-	});
-
-	test('passes "this" through, which stands for the selected rows', () => {
-		expect(SELECTION_HINT).toBe("this");
-		expect(hintFrom("this")).toBe("this");
 	});
 
 	test("is empty for nothing", () => {
