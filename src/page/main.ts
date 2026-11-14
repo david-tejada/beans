@@ -10,6 +10,7 @@ import { rowKeys, type RowKey } from "./row-keys";
 import { findRow, nameElement, openQuickInput, rowKeyParts, sidebars, visibleRows } from "./rows";
 import { scroll } from "./scroll";
 import { EDITOR, HIDDEN_CLASS, HINT_ATTR, SELECTORS } from "./selectors";
+import { labelTabs, slot, type TabMemory } from "./tabs";
 import { resolve, select, setExpanded } from "./targets";
 
 // The status bar item that carries requests. Its id holds the publisher,
@@ -17,6 +18,8 @@ import { resolve, select, setExpanded } from "./targets";
 const CHANNEL_ID = window.__beansChannelId ?? "";
 // The beans.stableHints setting, which inject.ts sets too.
 const STABLE_HINTS = window.__beansStableHints ?? false;
+// The beans.tabHints setting, which inject.ts sets too.
+const TAB_HINTS = window.__beansTabHints ?? true;
 
 start();
 
@@ -28,9 +31,12 @@ function start(): void {
 	let settleUntil = 0;
 	let settleTimer: number | undefined;
 	let memory: StableMemory = { letters: new Map(), rows: new Map() };
+	let tabMemory: TabMemory<HTMLElement> = { letters: new Map(), tabs: new Map() };
 	const update = () => {
 		scheduled = false;
 		lastRequest = readChannel(lastRequest);
+		// Tabs aren't held back: Theia, which holds rows back, has no tab hints.
+		tabMemory = labelTabs(tabMemory, TAB_HINTS);
 		const wait = settleUntil - performance.now();
 		if (wait > 0) {
 			clearTimeout(settleTimer);
@@ -47,7 +53,8 @@ function start(): void {
 
 	// Rows are recycled and repositioned through inline styles as lists
 	// scroll, so style and class changes are what signal "relabel".
-	// Mutations in the editor are ignored to keep typing cheap.
+	// Mutations in the editor are ignored to keep typing cheap, except in
+	// its tab strips, which typing doesn't change.
 	const observer = new MutationObserver((records) => {
 		if (!records.some(isRelevant)) return;
 		if (records.some(addsSwappedRow)) settleUntil = performance.now() + SETTLE_MS;
@@ -78,7 +85,7 @@ function start(): void {
 		clearTimeout(settleTimer);
 	};
 	// The extension calls these through the debug pipe (inject.ts).
-	window.__beans = { resolve, setExpanded, select, resize, rowPoint };
+	window.__beans = { resolve, setExpanded, select, resize, rowPoint, slot };
 	schedule();
 	console.log("[beans] loaded");
 }
@@ -108,7 +115,7 @@ function isRelevant(record: MutationRecord): boolean {
 	if (!node) return false;
 	// Before the workbench has been built, any change may be a sidebar appearing.
 	if (!document.querySelector(SELECTORS.parts.join(","))) return true;
-	const watched = [...SELECTORS.parts, SELECTORS.quickInput, SELECTORS.statusBar].join(",");
+	const watched = [...SELECTORS.parts, SELECTORS.quickInput, SELECTORS.statusBar, SELECTORS.tabsContainer].join(",");
 	return Boolean(node.closest(watched)) || node === document.body;
 }
 

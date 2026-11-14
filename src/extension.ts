@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
-import { editorOf, setEditor } from "./editor";
+import { currentEditor, editorOf, setEditor } from "./editor";
 import { callPage, injectAll, type PageFiles } from "./inject";
 import { createOutput } from "./output";
 import { userDataDir } from "./paths";
@@ -59,9 +59,12 @@ export function activate(context: vscode.ExtensionContext): void {
 			inject(page, channel, { quiet: isRecord(options) && options.quiet === true }),
 		),
 		vscode.commands.registerCommand("beans.relaunch", relaunch),
+		vscode.commands.registerCommand("beans.slot", slot),
 		// A changed setting reaches the windows through a fresh injection.
 		vscode.workspace.onDidChangeConfiguration((event) => {
-			const changed = ["beans.hintSpacing", "beans.stableHints"].some((name) => event.affectsConfiguration(name));
+			const changed = ["beans.hintSpacing", "beans.stableHints", "beans.tabHints"].some((name) =>
+				event.affectsConfiguration(name),
+			);
 			if (changed) void inject(page, channel, { quiet: true });
 		}),
 	);
@@ -134,6 +137,28 @@ async function rowPoint(letters: unknown): Promise<{ x: number; y: number } | nu
 	return point ?? null;
 }
 
+/** Switches to the editor tab with this hint in the focused window, and says when there's none. */
+async function slot(letters: unknown): Promise<void> {
+	const hint = hintFrom(letters);
+	if (!hint) return;
+	if (currentEditor() === "theia") {
+		warn("tab hints don't work in Theia yet; open the file from Open Editors in the Explorer instead");
+		return;
+	}
+	if (!vscode.workspace.getConfiguration("beans").get<boolean>("tabHints", true)) {
+		warn("tab hints are off; turn on the beans.tabHints setting to use them");
+		return;
+	}
+	let found;
+	try {
+		found = await callPage("slot", hint);
+	} catch (error) {
+		await reportError(error);
+		return;
+	}
+	if (!found) warn(`no tab with hint ${hint.toUpperCase()}`);
+}
+
 /** Resizes a part or a sidebar view in the focused window, and says when it couldn't. */
 async function resize(request: ResizeRequest): Promise<void> {
 	let result;
@@ -178,5 +203,6 @@ function settings(): PageSettings {
 	return {
 		hintSpacing: toHintSpacing(config.get<string>("hintSpacing", "default")),
 		stableHints: config.get<boolean>("stableHints", false),
+		tabHints: config.get<boolean>("tabHints", true),
 	};
 }

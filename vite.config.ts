@@ -69,6 +69,7 @@ export default defineConfig({
 						"__beansEditor",
 						"__beansStableHints",
 						"__beansStop",
+						"__beansTabHints",
 						"__beansVersion",
 					],
 				},

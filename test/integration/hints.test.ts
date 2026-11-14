@@ -1,7 +1,7 @@
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 import type { Editor as EditorKind, ResolveResult } from "../../src/shared/types";
-import { EDITOR_KIND, KEYS, startEditor, type Editor } from "./start-editor";
+import { EDITOR_KIND, KEYS, startEditor, type Editor, type Keybinding } from "./start-editor";
 
 const WORKSPACE = path.join(import.meta.dirname, "workspace");
 
@@ -21,6 +21,15 @@ const DOM = {
 		tabName: ".tabs-container .tab .label-name",
 		paletteRow: ".quick-input-widget .monaco-list-row",
 		sidebarItems: ".part.sidebar :is(.monaco-list-row, .pane-header)[data-beans-hint]",
+		// A split of the editor area, the one with focus, and a tab in it, with
+		// its file's name. Theia has no tab hints yet.
+		tabs: {
+			group: ".editor-group-container",
+			activeGroup: ".editor-group-container.active",
+			tab: ".tabs-container > .tab",
+			activeTab: ".tabs-container > .tab.active",
+			name: ".label-name",
+		},
 		// The Activity Bar button that shows a view container, and the
 		// container's id.
 		containers: {
@@ -45,6 +54,7 @@ const DOM = {
 		tabName: "#theia-main-content-panel .lm-TabBar-tab .lm-TabBar-tabLabel",
 		paletteRow: ".quick-input-widget .monaco-list-row",
 		sidebarItems: "#theia-left-side-panel :is(.theia-TreeNode, .theia-view-container-part-header)[data-beans-hint]",
+		tabs: null,
 		containers: {
 			Explorer: { button: "#shell-tab-explorer-view-container", id: "explorer-view-container" },
 			Extensions: { button: "#shell-tab-vsx-extensions-view-container", id: "vsx-extensions-view-container" },
@@ -217,5 +227,111 @@ describe(`Beans in a real ${dom.name}`, () => {
 		const shown = expanded ? hasRow("d.txt") : `!(${hasRow("d.txt")})`;
 		await editor.waitFor(shown, expanded ? "the folder's files to show" : "the folder's files to hide");
 		await editor.evaluate("new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))");
+	}
+
+	// Tab hints: VS Code only, for now.
+	const tabs = dom.tabs;
+
+	it.skipIf(!tabs)("letters every editor tab, and a tab keeps its letters when another closes", async () => {
+		await openTabs(["a.txt", "b.txt", "c.txt"]);
+		const before = await tabHintsOf(["a.txt", "b.txt", "c.txt"]);
+		for (const hint of before) expect(hint).toMatch(/^[a-z]+$/);
+		expect(new Set(before).size).toBe(3);
+
+		await runCommand("beans.slot", before[0], `${activeTabName(0)} === "a.txt"`, "a.txt to show");
+		await runCommand(
+			"workbench.action.closeActiveEditor",
+			undefined,
+			`${tabHint("a.txt")} === null && ${tabHint("b.txt")} !== null`,
+			"a.txt to close",
+		);
+		// VS Code moves b.txt and c.txt into the tab elements to their left.
+		expect(await tabHintsOf(["b.txt", "c.txt"])).toEqual(before.slice(1));
+	});
+
+	it.skipIf(!tabs)("letters the same file in two splits apart, and beans.slot switches to either", async () => {
+		await openTabs(["a.txt", "b.txt"]);
+		await runCommand("workbench.action.splitEditor", undefined, `${groupCount} >= 2`, "a second split");
+		const right = await editor.waitFor<string>(tabHint("b.txt", 1), "b.txt's tab in the second split");
+		const left = await editor.evaluate<string>(tabHint("b.txt", 0));
+		expect(right).toMatch(/^[a-z]+$/);
+		expect(left).toMatch(/^[a-z]+$/);
+		expect(right).not.toBe(left);
+
+		// a.txt isn't the active tab of the first split, and the second has focus.
+		const a = await editor.evaluate<string>(tabHint("a.txt", 0));
+		await runCommand("beans.slot", a, `${activeGroup} === 0 && ${activeTabName(0)} === "a.txt"`, "a.txt to show");
+		await runCommand("beans.slot", right, `${activeGroup} === 1`, "the second split to take focus");
+		expect(await editor.evaluate<string>(activeTabName(1))).toBe("b.txt");
+	});
+
+	it.skipIf(!tabs)("draws no tab hints with beans.tabHints off", async () => {
+		await openTabs(["a.txt"]);
+		editor.setSettings({ "beans.tabHints": false });
+		try {
+			await editor.waitFor("window.__beansTabHints === false", "the script without tab hints");
+			await editor.waitFor(`document.querySelectorAll("[data-beans-tab]").length === 0`, "the tab hints to go");
+			expect(await editor.evaluate<number>(`document.querySelectorAll(${JSON.stringify(tabs!.tab)}).length`)).toBe(1);
+		} finally {
+			editor.setSettings({});
+			await editor.waitFor("window.__beansTabHints === true", "the script with tab hints");
+		}
+	});
+
+	// Expressions about the tabs. A split is given by its place among the
+	// splits, a tab by its file's name.
+	const groupCount = `document.querySelectorAll(${JSON.stringify(tabs?.group)}).length`;
+	const activeGroup = `[...document.querySelectorAll(${JSON.stringify(tabs?.group)})].findIndex((group) => group.matches(${JSON.stringify(tabs?.activeGroup)}))`;
+	const tabsIn = (group: number) =>
+		`[...(document.querySelectorAll(${JSON.stringify(tabs?.group)})[${group}]?.querySelectorAll(${JSON.stringify(tabs?.tab)}) ?? [])]`;
+	const tabHint = (name: string, group = 0) =>
+		`(${tabsIn(group)}.find((tab) => tab.querySelector(${JSON.stringify(tabs?.name)})?.textContent?.trim() === ${JSON.stringify(name)})?.getAttribute("data-beans-tab") ?? null)`;
+	const activeTabName = (group: number) =>
+		`(document.querySelectorAll(${JSON.stringify(tabs?.group)})[${group}]?.querySelector(${JSON.stringify(`${tabs?.activeTab} ${tabs?.name}`)})?.textContent?.trim() ?? null)`;
+
+	async function tabHintsOf(names: string[]): Promise<(string | null)[]> {
+		return Promise.all(names.map((name) => editor.evaluate<string | null>(tabHint(name))));
+	}
+
+	// Closes every editor, then opens these files of the workspace in one
+	// split, pinned, in this order, and waits for their tabs' hints.
+	async function openTabs(names: string[]): Promise<void> {
+		await runCommand(
+			"workbench.action.closeAllGroups",
+			undefined,
+			`${groupCount} === 1 && ${tabsIn(0)}.length === 0`,
+			"no editors open",
+		);
+		const dir = await editor.waitFor<string>(rowHint("dir"), "the dir row");
+		await setDirExpanded(dir, true);
+		const hints = await Promise.all(names.map((name) => editor.waitFor<string>(rowHint(name), `the ${name} row`)));
+		const shown = names.map((name) => `${tabHint(name)} !== null`).join(" && ");
+		await runCommand("beans.open", { target: { items: hints.map((hint) => ({ hint })) } }, shown, "the tabs' hints");
+		await setDirExpanded(dir, false);
+	}
+
+	// Runs a command through a keybinding, as Talon would, until the
+	// expression holds. Each command and arguments gets its own key, so a
+	// press can't reach a binding the editor hasn't reloaded yet.
+	const bindings: Keybinding[] = [];
+	async function runCommand(command: string, args: unknown, until: string, what: string): Promise<void> {
+		let digit = bindings.findIndex(
+			(binding) => binding.command === command && JSON.stringify(binding.args) === JSON.stringify(args),
+		);
+		if (digit === -1) {
+			digit = bindings.length;
+			if (digit > 9) throw new Error("runCommand ran out of keys");
+			bindings.push({ key: `ctrl+alt+${digit}`, command, args });
+			editor.setKeybindings(bindings);
+		}
+		for (let attempt = 0; attempt < 5; attempt++) {
+			await editor.press({ key: String(digit), code: `Digit${digit}`, keyCode: 48 + digit, ctrl: true, alt: true });
+			const done = await editor.waitFor(until, what, 3000).then(
+				() => true,
+				() => false,
+			);
+			if (done) return;
+		}
+		throw new Error(`Timed out waiting for ${what}`);
 	}
 });

@@ -126,6 +126,7 @@ function injectionScript(files: PageFiles, channelId: string, settings: PageSett
 		.update(channelId)
 		.update(settingsRule)
 		.update(String(settings.stableHints))
+		.update(String(settings.tabHints))
 		.digest("hex")
 		.slice(0, 12);
 	return `(() => {
@@ -134,6 +135,7 @@ function injectionScript(files: PageFiles, channelId: string, settings: PageSett
 		window.__beansEditor = ${JSON.stringify(editor)};
 		window.__beansChannelId = ${JSON.stringify(channelId)};
 		window.__beansStableHints = ${JSON.stringify(settings.stableHints)};
+		window.__beansTabHints = ${JSON.stringify(settings.tabHints)};
 		document.getElementById("beans-style")?.remove();
 		const style = document.createElement("style");
 		style.id = "beans-style";
