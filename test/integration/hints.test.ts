@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 import type { Editor as EditorKind, ResolveResult } from "../../src/shared/types";
@@ -297,6 +298,67 @@ describe(`Beans in a real ${dom.name}`, () => {
 		if (EDITOR_KIND === "theia") {
 			const header = await editor.waitFor<string>(headerHint("Open Editors"), "the Open Editors header");
 			await editor.evaluate(`window.__beans.setExpanded(${target(header)}, false)`);
+		}
+	});
+
+	// VS Code only: Cmd+A (Ctrl+A) doesn't select all in Theia's trees.
+	it.skipIf(EDITOR_KIND === "theia")("won't delete a selection that runs past the screen", async () => {
+		// More files than the Explorer shows, made here rather than kept in the fixture.
+		const folder = path.join(WORKSPACE, "many");
+		const names = Array.from({ length: 60 }, (_, i) => `m${String(i + 1).padStart(2, "0")}.txt`);
+		fs.mkdirSync(folder, { recursive: true });
+		for (const name of names) fs.writeFileSync(path.join(folder, name), "");
+		try {
+			const hint = await editor.waitFor<string>(rowHint("many"), "the many folder's row");
+			await editor.evaluate(`window.__beans.setExpanded(${target(hint)}, true)`);
+			await editor.waitFor(hasRow("m01.txt"), "the folder's files to show");
+			await clickUntilSelected("m01.txt");
+			const mac = process.platform === "darwin";
+			// The key can arrive before the list has the focus, so press until it selects.
+			let selectedAll = false;
+			for (let attempt = 0; attempt < 5 && !selectedAll; attempt++) {
+				await editor.press({ key: "a", code: "KeyA", keyCode: 65, meta: mac, ctrl: !mac });
+				selectedAll = await editor
+					.waitFor(
+						`document.querySelectorAll(${JSON.stringify(dom.selectedRow)}).length > 10`,
+						"select-all to select the rows",
+						2000,
+					)
+					.then(
+						() => true,
+						() => false,
+					);
+				if (!selectedAll) await clickUntilSelected("m01.txt");
+			}
+			expect(selectedAll).toBe(true);
+			const all = await editor.evaluate<ResolveResult>(`window.__beans.resolve(${target("this")})`);
+			expect(all.selectionRunsPast).toBe(true);
+
+			// Beans says why it did nothing, so the toast shows the command ran.
+			editor.setKeybindings([
+				{ key: "ctrl+alt+7", command: "beans.delete", args: { target: { items: [{ hint: "this" }] } } },
+			]);
+			let refused = false;
+			for (let attempt = 0; attempt < 5 && !refused; attempt++) {
+				await editor.press({ key: "7", code: "Digit7", keyCode: 55, ctrl: true, alt: true });
+				refused = await editor
+					.waitFor(`document.body.innerText.includes("Beans did nothing")`, "the refusal", 3000)
+					.then(
+						() => true,
+						() => false,
+					);
+			}
+			expect(refused).toBe(true);
+			expect(fs.readdirSync(folder)).toHaveLength(names.length);
+
+			// Two rows in the middle of the screen are all there is.
+			await clickUntilSelected("m02.txt");
+			await editor.evaluate(`window.__beans.select([${JSON.stringify(await fileItem("m03.txt"))}])`);
+			const two = await editor.evaluate<ResolveResult>(`window.__beans.resolve(${target("this")})`);
+			expect(two.selectionRunsPast).toBe(false);
+			expect(two.items.map((item) => path.basename(item.path))).toEqual(["m02.txt", "m03.txt"]);
+		} finally {
+			fs.rmSync(folder, { recursive: true, force: true });
 		}
 	});
 

@@ -139,7 +139,7 @@ async function resolveTarget(target: Target | null, use: SelectionUse): Promise<
 	}
 	if (result.selectionRunsPast && use === "all") {
 		vscode.window.showWarningMessage(
-			"Beans did nothing, because the selection may go on past the screen and only the part on screen would be used. Say the rows' hints instead, or select fewer rows.",
+			"Beans did nothing, because the selection may go on past the screen and only the part on screen would be used. Scroll until a row past each end of the selection shows, or say the rows' hints.",
 		);
 		return null;
 	}

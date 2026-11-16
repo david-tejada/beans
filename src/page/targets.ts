@@ -2,7 +2,7 @@ import { SELECTION_HINT } from "../requests";
 import type { ResolveResult, SetExpandedResult, Target } from "../shared/types";
 import { clickElement, clickRow, nextFrame } from "./click";
 import { expandedState, hintOf, rowPath, selectedRows, sidebars, viewOf, visibleRows } from "./rows";
-import { placeRow, rowIndex, scrollPosition } from "./scroll";
+import { placeRow, rowIndex } from "./scroll";
 import { selectionMayRunPast } from "./selection-may-run-past";
 import { SELECTORS } from "./selectors";
 
@@ -127,9 +127,9 @@ function clickStickyTwistie(row: HTMLElement, twistie: HTMLElement): void {
  * aloud, on their own or as a range's end (ends), and the hints that
  * aren't on screen (missing). "this" (SELECTION_HINT) names the selected
  * rows on screen, and the first of them as a range's end; it's missing
- * when none is on screen. selectionRunsPast says the selection named by
- * "this" may go on past the screen, for the extension to decide whether
- * the rows that show will do.
+ * when none is on screen. selectionRunsPast says the selection may go on
+ * past the screen, wherever "this" was said, for the extension to decide
+ * whether the rows that show will do.
  */
 function targetRows(target: Target): {
 	rows: HTMLElement[];
@@ -146,10 +146,12 @@ function targetRows(target: Target): {
 	const chosen = new Set<number>();
 	const ends = new Set<string>();
 	const missing: string[] = [];
-	let selectionRunsPast = false;
+	// A range from "this" starts at the first selected row on screen, which
+	// is short of the selection's start when that's scrolled away.
+	const selectionRunsPast =
+		selection.list !== null && selected.length > 0 && listSelectionMayRunPast(selection.list, selection.rows);
 	for (const item of target.items) {
-		if ("hint" in item && item.hint === SELECTION_HINT && selection.list && selected.length) {
-			selectionRunsPast = listSelectionMayRunPast(selection.list, selection.rows);
+		if ("hint" in item && item.hint === SELECTION_HINT && selected.length) {
 			for (const i of selected) chosen.add(i);
 			continue;
 		}
@@ -178,29 +180,36 @@ function listSelectionMayRunPast(list: HTMLElement, shown: HTMLElement[]): boole
 		rows: rendered.map((row) => ({
 			selected: row.matches(SELECTORS.selectedRow),
 			shown: shown.includes(row),
-			focused: row.matches(SELECTORS.focusedRow),
 		})),
 		single: list.matches(SELECTORS.singleSelection),
 		multiple: list.matches(SELECTORS.multipleSelection),
-		moreAbove: canScroll(list, "up"),
-		moreBelow: canScroll(list, "down"),
+		moreAbove: rendered[0] !== undefined && hasRowsBeyond(list, rendered[0], "up"),
+		moreBelow: rendered.at(-1) !== undefined && hasRowsBeyond(list, rendered.at(-1)!, "down"),
 	});
 }
 
-/** Whether a list has rows above, or below, the ones it renders. */
-function canScroll(list: HTMLElement, direction: "up" | "down"): boolean {
+/**
+ * Whether a list has rows above, or below, its rendered row at that edge.
+ * VS Code's rows give their index and say whether they're the last one.
+ * Theia's virtualized trees give the index; for the rows below, their
+ * scroller has to be more than a row away from its end.
+ */
+function hasRowsBeyond(list: HTMLElement, edge: HTMLElement, direction: "up" | "down"): boolean {
+	if (direction === "up") {
+		// Theia's wrapper around the row carries it.
+		const index = edge.closest(SELECTORS.listIndex)?.getAttribute("data-index");
+		if (index != null) return Number(index) > 0;
+	} else {
+		if (edge.matches(SELECTORS.lastRow)) return false;
+		if (edge.matches(SELECTORS.notLastRow)) return true;
+	}
 	const scroller = list.matches(SELECTORS.nativeScroller)
 		? list
 		: list.querySelector<HTMLElement>(SELECTORS.nativeScroller);
-	if (scroller) {
-		const { scrollTop, scrollHeight, clientHeight } = scroller;
-		return direction === "up" ? scrollTop > 0 : scrollTop + clientHeight < scrollHeight - 1;
-	}
-	// VS Code's lists move their rows by style.top inside a box as tall as all of them.
-	const rows = list.querySelector<HTMLElement>(SELECTORS.listRows);
-	if (!rows) return false;
-	const top = scrollPosition(rows);
-	return direction === "up" ? top > 0 : top + list.clientHeight < parseFloat(rows.style.height || "0") - 1;
+	if (!scroller) return false;
+	const rowHeight = edge.getBoundingClientRect().height;
+	const { scrollTop, scrollHeight, clientHeight } = scroller;
+	return direction === "up" ? scrollTop >= rowHeight : scrollHeight - (scrollTop + clientHeight) >= rowHeight;
 }
 
 /**

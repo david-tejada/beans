@@ -62,8 +62,9 @@ const VSCODE = {
 	// A list holding one selected row, or more than one, wherever they are.
 	singleSelection: ".selection-single",
 	multipleSelection: ".selection-multiple",
-	// The row the keyboard is on, where a Shift+arrow range ends.
-	focusedRow: ".monaco-list-row.focused",
+	// A list row that is, or isn't, the list's last item.
+	lastRow: '[data-last-element="true"]',
+	notLastRow: '[data-last-element="false"]',
 	// A list that scrolls natively, with scrollTop; VS Code's lists don't.
 	nativeScroller: NONE,
 	// The parts that resize commands can target, by the name they're called with.
@@ -146,7 +147,9 @@ const THEIA: typeof VSCODE = {
 	// Theia doesn't say how many rows are selected.
 	singleSelection: NONE,
 	multipleSelection: NONE,
-	focusedRow: NONE,
+	// Theia's rows don't say which is last; its scroller does.
+	lastRow: NONE,
+	notLastRow: NONE,
 	// The scrolling element of a tree, from the react-virtuoso list Theia
 	// uses. In Source Control's graph, it's the list itself.
 	nativeScroller: "[data-virtuoso-scroller]",

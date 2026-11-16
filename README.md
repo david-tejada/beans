@@ -70,7 +70,7 @@ Anywhere you say a hint, you can say "this" for the selected rows instead: "bean
   | open, split, copy path, copy local, expand, collapse, parent, select, reveal, diff             | Beans uses the selected rows on screen, and says that's all it used                                     |
   | rename, new file, new folder, find in, a move's destination, and everything that takes one row | Beans uses the first selected row, as always                                                            |
 
-  Beans can tell when a selected row sits at the top or bottom edge of the list with more rows beyond it, unless it's the row the keyboard is on (a Shift+arrow range ends there); in Theia, when a selected row is just past the edge; and in VS Code, when only one of several selected rows shows. It can't tell when rows selected one by one, far apart, are scrolled away while others show; then "this" is the ones that show.
+  Beans can tell when a selected row sits at the top or bottom edge of the list with more rows beyond it, so a selection that ends exactly on the edge row counts too: scroll until a row past each end of the selection shows. It can also tell when a selected row is drawn just past the edge, as Theia does, and, in VS Code, when only one of several selected rows shows. The same goes for "this" as a range's end ("bean delete this past drum"). It can't tell when rows selected one by one, far apart, are scrolled away while others show; then "this" is the ones that show.
 
 ### Resize commands
 

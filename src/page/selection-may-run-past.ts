@@ -3,8 +3,6 @@ export interface RowFacts {
 	selected: boolean;
 	/** On screen, with a hint; a rendered row can be hidden past an edge or under sticky scroll. */
 	shown: boolean;
-	/** The list's focused row, where a Shift+arrow or Shift+click range ends. */
-	focused: boolean;
 }
 
 /** What the page sees of a list: its rendered rows, top to bottom, and what it says about its selection. */
@@ -30,11 +28,8 @@ export function selectionMayRunPast({ rows, single, multiple, moreAbove, moreBel
 	// A selected row that's rendered but hidden: VS Code renders the rows
 	// under sticky scroll, Theia a screen's worth past each edge.
 	if (rows.some((row) => row.selected && !row.shown)) return true;
-	return goesOnFrom(rows[0], moreAbove) || goesOnFrom(rows.at(-1), moreBelow);
-}
-
-// A selected row at the edge of what's rendered, with rows beyond it, may
-// go on. Unless it's the focused row: a Shift range ends there.
-function goesOnFrom(edge: RowFacts | undefined, more: boolean): boolean {
-	return edge !== undefined && edge.selected && edge.shown && !edge.focused && more;
+	// A selected row at the edge of what's rendered, with rows beyond it, may
+	// go on. Even the focused row: a Shift range ends there, but so does
+	// select-all when the focus happens to be on the edge.
+	return (rows[0]?.selected === true && moreAbove) || (rows.at(-1)?.selected === true && moreBelow);
 }
