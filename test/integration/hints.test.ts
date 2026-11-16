@@ -269,32 +269,41 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(await editor.evaluate<string>(activeTabName(1))).toBe("b.txt");
 	});
 
+	// In the next two, the tabs to the left close first, which frees A and B:
+	// a tab whose key changed would take A.
 	it.skipIf(!tabs)("keeps a preview tab's letters when it's kept open", async () => {
-		await openTabs([]);
+		await openTabs(["b.txt", "c.txt"]);
 		const row = await editor.waitFor<string>(rowHint("a.txt"), "the a.txt row");
 		// A click on a file opens it in a preview tab, which VS Code keeps
 		// open once you edit the file or double-click it.
-		await runCommand("beans.pick", row, `${tabHint("a.txt")} !== null && ${isPreview(0)}`, "a.txt's preview tab");
-		expect(await tabHintsOf(["a.txt"])).toEqual(["a"]);
+		await runCommand("beans.pick", row, `${tabHint("a.txt")} !== null && ${isPreview(2)}`, "a.txt's preview tab");
+		expect(await tabHintsOf(["a.txt"])).toEqual(["c"]);
+		await runCommand("workbench.action.closeEditorsToTheLeft", undefined, `${tabsIn(0)}.length === 1`, "a.txt alone");
 		await runCommand("workbench.action.keepEditor", undefined, `!(${isPreview(0)})`, "a.txt to be kept open");
-		await nextFrames();
-		expect(await tabHintsOf(["a.txt"])).toEqual(["a"]);
+		await relabel();
+		expect(await tabHintsOf(["a.txt"])).toEqual(["c"]);
 	});
 
 	it.skipIf(!tabs)("keeps an untitled file's letters while its first line, its name, is typed", async () => {
-		await openTabs(["a.txt"]);
-		await runCommand("workbench.action.files.newUntitledFile", undefined, `${tabsIn(0)}.length === 2`, "a new file");
-		expect(await editor.evaluate(tabHintsIn(0))).toEqual(["a", "b"]);
+		await openTabs(["a.txt", "b.txt"]);
+		await runCommand("workbench.action.files.newUntitledFile", undefined, `${tabsIn(0)}.length === 3`, "a new file");
+		expect(await editor.evaluate(tabHintsIn(0))).toEqual(["a", "b", "c"]);
+		await runCommand(
+			"workbench.action.closeEditorsToTheLeft",
+			undefined,
+			`${tabsIn(0)}.length === 1`,
+			"the new file alone",
+		);
 		try {
 			await editor.type("hello world");
 			await editor.waitFor(`${tabHint("hello world")} !== null`, "the untitled tab to take its first line's name");
-			await nextFrames();
-			expect(await editor.evaluate(tabHintsIn(0))).toEqual(["a", "b"]);
+			await relabel();
+			expect(await editor.evaluate(tabHintsIn(0))).toEqual(["c"]);
 		} finally {
 			await runCommand(
 				"workbench.action.revertAndCloseActiveEditor",
 				undefined,
-				`${tabsIn(0)}.length === 1`,
+				`${tabsIn(0)}.length === 0`,
 				"the untitled file to close",
 			);
 		}
@@ -357,6 +366,12 @@ describe(`Beans in a real ${dom.name}`, () => {
 		const strip = document.querySelector(${JSON.stringify(tabs?.strip)}).getBoundingClientRect();
 		return tab.right <= strip.left || tab.left >= strip.right;
 	})()`;
+	// Makes Beans relabel, as a resize of the window does, and waits for it:
+	// what changes a tab's look alone doesn't.
+	const relabel = async () => {
+		await editor.evaluate(`window.dispatchEvent(new Event("resize"))`);
+		await nextFrames();
+	};
 	const nextFrames = () =>
 		editor.evaluate("new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))");
 

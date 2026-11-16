@@ -3,7 +3,7 @@
 ## Unreleased
 
 - The Talon commands have new words, and the old ones are gone. The commands that act on rows start with "bean", so they don't clash with other Talon commands such as talon-gaze-ocr's "click": "click air" is now "bean air", "righty air" is "bean righty air", "open air" is "bean open air", and "file delete air" is "bean delete air". A few changed more than their prefix: "file open folder" is "bean reveal", "file create" and "folder new" are "bean new file" and "bean new folder". The resize commands say "bigger", "smaller" and "size": "bar bigger" for the sidebar, "right bar bigger" for the secondary sidebar, "panel smaller", "view air size 300". "upper" and "downer" are unchanged. The full list is in the beans-talon README. Pull beans-talon (`git pull` in its folder) to get the new words.
-- Editor tabs get letters, in every split: "slot cap" switches to the tab marked C, even when it's scrolled out of the tab strip. Tab letters are apart from the sidebar's, and a tab keeps its letters for as long as it's open, so closing another tab doesn't change them. The `beans.tabHints` setting turns them off. They don't work in Theia yet. Pull beans-talon to get "slot".
+- Editor tabs get letters, in every split: "slot cap" switches to the tab marked C, even when it's scrolled out of the tab strip. Tab letters are apart from the sidebar's, and a tab keeps its letters for as long as it's open, so closing another tab doesn't change them. Renaming a file can change its tab's letters, and two tabs with the same name in one split can trade letters when one closes. The `beans.tabHints` setting turns them off. They don't work in Theia yet. Pull beans-talon to get "slot".
 
 ## 0.3.1
 

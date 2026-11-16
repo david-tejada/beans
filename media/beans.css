@@ -103,9 +103,10 @@ body:not(.beans-hidden)
 	display: none;
 }
 /* Tabs that keep their width (workbench.editor.tabSizing "shrink" or
-   "fixed") narrow to fit many tabs, and the pill beside the icon would leave
-   no room for the name, so it takes the icon's place there too. The file
-   icon is the label's ::before. */
+   "fixed", and pinned tabs with pinnedTabSizing "shrink", whatever the
+   tabSizing) narrow to fit many tabs, and the pill beside the icon would
+   leave no room for the name, so it takes the icon's place there too. The
+   file icon is the label's ::before. */
 body:not(.beans-hidden)
 	.monaco-workbench
 	.part.editor
@@ -117,6 +118,12 @@ body:not(.beans-hidden)
 	.part.editor
 	.tabs-container
 	> .tab.sizing-fixed[data-beans-tab]
+	> .tab-label::before,
+body:not(.beans-hidden)
+	.monaco-workbench
+	.part.editor
+	.tabs-container
+	> .tab.sticky-shrink[data-beans-tab]
 	> .tab-label::before {
 	display: none;
 }
