@@ -260,6 +260,29 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(await focusKept(editor)).toBe(true);
 	});
 
+	it("scrolls the document most of a screen with editor.smoothScrolling", async () => {
+		editor.setSettings({ "editor.smoothScrolling": true });
+		try {
+			await openOnly(editor, "long.txt");
+			// Nothing on the page says the setting has arrived; the editor reads
+			// its settings file within a moment.
+			await new Promise((resolve) => setTimeout(resolve, 2000));
+			const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
+			// A few in a row, since Monaco only takes a run of wheel events for
+			// a mouse's, and smooths those.
+			for (let scroll = 0; scroll < 3; scroll++) {
+				const before = await editor.evaluate<number[]>(splitScrolls);
+				await editor.press(SCROLL_KEY);
+				const after = await settledScrolls(editor, before);
+				const moved = (after[0] ?? 0) - (before[0] ?? 0);
+				expect(moved, `scroll ${scroll + 1}`).toBeGreaterThan(0.8 * height - lineHeight - 1);
+				expect(moved, `scroll ${scroll + 1}`).toBeLessThan(0.8 * height + 1);
+			}
+		} finally {
+			editor.setSettings({});
+		}
+	});
+
 	it("scrolls the left and right splits without moving the focus", async () => {
 		await openOnly(editor, "long.txt");
 		await pressUntil(editor, SPLIT_KEY, `(${splitScrolls}).length === 2`, "the editor to split");
@@ -304,10 +327,12 @@ describe(`Beans in a real ${dom.name}`, () => {
 });
 
 // A file long enough that Monaco shifts its lines back past each 500,000px
-// (see scrollBy in src/page/scroll.ts). With 20px lines and the room to
-// scroll the last line to the top, the bottom is 2,000,200px down: just
-// past a shift, so a page up from there crosses it.
-const LONG_FILE_LINES = 100_011;
+// (see scrollBy in src/page/scroll.ts). With 18px lines and the room to
+// scroll the last line to the top, the bottom is 2,000,016px down: just
+// past a shift, so a page up from there crosses it. 18 doesn't divide
+// 500,000, so the shift isn't a round number there: 1,499,994px below it,
+// 1,999,998px past it.
+const LONG_FILE_LINES = 111_113;
 
 describe(`Beans in a real ${dom.name}, in a file of ${LONG_FILE_LINES} lines`, () => {
 	let editor: Editor;
@@ -319,7 +344,7 @@ describe(`Beans in a real ${dom.name}, in a file of ${LONG_FILE_LINES} lines`, (
 		// No newline at the end, so the last line has text to look for.
 		fs.writeFileSync(path.join(workspace, "huge.txt"), lines.join("\n"));
 		editor = await startEditor(workspace);
-		editor.setSettings({ "editor.lineHeight": 20, "editor.scrollBeyondLastLine": true });
+		editor.setSettings({ "editor.lineHeight": 18, "editor.scrollBeyondLastLine": true });
 	});
 
 	afterAll(async () => {
@@ -329,21 +354,25 @@ describe(`Beans in a real ${dom.name}, in a file of ${LONG_FILE_LINES} lines`, (
 
 	it("reaches the last and the first line, and moves 80% of a screen deep in the file", async () => {
 		await openOnly(editor, "huge.txt");
-		await editor.waitFor(`${editorSize}.lineHeight === 20`, "the 20px lines setting");
+		await editor.waitFor(`${editorSize}.lineHeight === 18`, "the 18px lines setting");
 		const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
 		const page = Math.floor((0.8 * height) / lineHeight);
 
 		await sendScroll(editor, { direction: "bottom", hint: "", place: "document" });
 		await editor.waitFor(lineShown(LONG_FILE_LINES), "the last line");
 		const bottom = await settledTopLine(editor);
+		const cut = await editor.evaluate<number>(topLineCut);
 
+		// Both cross the shift, and move whole lines: the top line is cut as before.
 		await sendScroll(editor, { direction: "up", hint: "", place: "document" });
 		const up = await settledTopLine(editor, bottom);
-		expect(Math.abs(bottom - up - page), `${bottom} up to ${up}`).toBeLessThanOrEqual(1);
+		expect(bottom - up, `${bottom} up to ${up}`).toBe(page);
+		expect(await editor.evaluate<number>(topLineCut), "the top line's cut after a page up").toBeCloseTo(cut, 0);
 
 		await sendScroll(editor, { direction: "down", hint: "", place: "document" });
 		const down = await settledTopLine(editor, up);
-		expect(Math.abs(down - up - page), `${up} down to ${down}`).toBeLessThanOrEqual(1);
+		expect(down - up, `${up} down to ${down}`).toBe(page);
+		expect(await editor.evaluate<number>(topLineCut), "the top line's cut after a page down").toBeCloseTo(cut, 0);
 
 		await sendScroll(editor, { direction: "top", hint: "", place: "document" });
 		await editor.waitFor(lineShown(1), "the first line");
@@ -379,6 +408,15 @@ const topLine = `(() => {
 
 const lineShown = (number: number) =>
 	`[...document.querySelectorAll(${JSON.stringify(dom.editorLine)})].some((line) => /\\d+/.exec(line.textContent)?.[0] === ${JSON.stringify(String(number))})`;
+
+// How much of the line at the top of the editor is cut off, in pixels.
+const topLineCut = `(() => {
+	const top = document.querySelector(${JSON.stringify(dom.textEditor)}).getBoundingClientRect().top;
+	const line = [...document.querySelectorAll(${JSON.stringify(dom.editorLine)})]
+		.map((element) => element.getBoundingClientRect())
+		.find((box) => box.top <= top && top < box.bottom);
+	return line ? top - line.top : 0;
+})()`;
 
 /**
  * Closes every editor, then opens this file of the workspace from its
