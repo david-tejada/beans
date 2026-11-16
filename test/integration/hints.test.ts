@@ -281,7 +281,7 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(await focusKept(editor)).toBe(true);
 	});
 
-	it("scrolls the Command Palette, not the document, while it's open", async () => {
+	it("scrolls the Command Palette, not the document, while it's open, even for a split", async () => {
 		await openOnly(editor, "long.txt");
 		// "|| 0" turns -0, which the page can't send back as a value, into 0.
 		const paletteScroll = `(-parseFloat(document.querySelector(${JSON.stringify(dom.paletteRows)})?.style.top || "0") || 0)`;
@@ -289,12 +289,14 @@ describe(`Beans in a real ${dom.name}`, () => {
 		await editor.waitFor(`document.querySelectorAll(${JSON.stringify(dom.paletteRow)}).length > 5`, "the palette");
 		try {
 			const documentScroll = await editor.evaluate<number[]>(splitScrolls);
-			const palette = await editor.evaluate<number>(paletteScroll);
 			// The palette keeps keys to itself, so this sends what Talon's
-			// bare "downer" does.
-			await sendScroll(editor, { direction: "down", hint: "", place: "document" });
-			await editor.waitFor(`${paletteScroll} > ${palette}`, "the palette to scroll");
-			expect(await editor.evaluate<number[]>(splitScrolls)).toEqual(documentScroll);
+			// "downer" and "downer left" do.
+			for (const place of ["document", "left"] as const) {
+				const palette = await editor.evaluate<number>(paletteScroll);
+				await sendScroll(editor, { direction: "down", hint: "", place });
+				await editor.waitFor(`${paletteScroll} > ${palette}`, `the palette to scroll for "${place}"`);
+				expect(await editor.evaluate<number[]>(splitScrolls), `the document after "${place}"`).toEqual(documentScroll);
+			}
 		} finally {
 			await editor.press(KEYS.Escape);
 		}

@@ -41,16 +41,16 @@ A **hint** is the letters on a row, spoken with your community alphabet words. A
 
 ### Scrolling
 
-On their own, these scroll the document in the editor split you're in, even while the focus is in the sidebar or the terminal. While the Command Palette is open, they scroll it instead. A scroll moves 80% of the view, so a fifth of it, and at least one line, stays in sight.
+On their own, these scroll the document in the editor split you're in, even while the focus is in the sidebar or the terminal. While the Command Palette is open, every one of them scrolls it instead. A scroll moves 80% of the view, so a fifth of it, and at least one line, stays in sight.
 
 | Say | What it does |
 | --- | --- |
 | `upper` / `downer` | Scroll the document up or down |
 | `upper left` / `downer left` | Scroll the left editor split, without moving the focus |
 | `upper right` / `downer right` | Scroll the right editor split, without moving the focus |
-| `upper bar` / `downer bar` | Scroll the open Command Palette, or else the tallest sidebar list |
+| `upper bar` / `downer bar` | Scroll the tallest sidebar list |
 | `upper side` / `downer side` | The same as `bar` |
-| `upper <hint>` / `downer <hint>` | Scroll the open Command Palette, or else the sidebar list holding that row |
+| `upper <hint>` / `downer <hint>` | Scroll the sidebar list holding that row |
 | `upper all …` / `downer all …` | Scroll to the top or the bottom, followed by nothing, `left`, `right`, `bar`, `side` or a hint |
 
 The left split is the one furthest to the left, and the right split the one furthest to the right, wherever the focus is: with three splits side by side, they're the outer two. When two are stacked on that side, it's the one level with the split you're in, else the top one. With one split, both words scroll it.

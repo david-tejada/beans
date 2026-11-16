@@ -7,10 +7,10 @@ import { splitOnSide } from "./split-on-side";
 
 /**
  * Scrolls "up", "down" (most of a screen), to the "top" or to the "bottom".
- * The "left" or "right" place is that editor split. Otherwise it's the open
- * quick pick, else the sidebar list holding the row with this hint (or
- * under the view header with it), else for "bar" the tallest sidebar list,
- * and for "document" the editor split with the focus.
+ * An open quick pick takes every scroll. Otherwise it's the "left" or
+ * "right" editor split, else the sidebar list holding the row with this
+ * hint (or under the view header with it), else for "bar" the tallest
+ * sidebar list, and for "document" the editor split with the focus.
  */
 export function scroll({ direction, hint, place }: ScrollRequest): void {
 	const view = viewToScroll(hint, place);
@@ -43,9 +43,9 @@ interface ScrollView {
 }
 
 function viewToScroll(hint: string, place: ScrollPlace): ScrollView | null {
-	if (place === "left" || place === "right") return documentIn(splitToScroll(place));
 	const quickInput = openQuickInput();
 	if (quickInput) return listView(quickInput.querySelector<HTMLElement>(SELECTORS.list), true);
+	if (place === "left" || place === "right") return documentIn(splitToScroll(place));
 	if (hint) {
 		const row = sidebarRowWithHint(hint);
 		if (row?.matches(SELECTORS.paneHeader))

@@ -12,10 +12,10 @@ bean toggle: user.run_rpc_command("beans.toggle")
 # right-clicks at the mouse; the prefix keeps the two apart.
 bean righty <user.beans_hint>: user.beans_right_click(beans_hint)
 
-# Scrolls the open Command Palette, else the document in the focused editor
-# split. With a hint, scrolls the sidebar list holding that row. "left" and
-# "right" scroll that editor split without moving the focus; "bar" or "side"
-# the open Command Palette, else the tallest sidebar list (see
+# An open Command Palette takes every scroll. Otherwise these scroll the
+# document in the focused editor split; with a hint, the sidebar list holding
+# that row; with "left" or "right", that editor split, without moving the
+# focus; with "bar" or "side", the tallest sidebar list (see
 # beans_scroll_place.talon-list). Same words as Rango.
 upper [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "up", beans_hint or "", "")
 downer [<user.beans_hint>]: user.run_rpc_command("beans.scroll", "down", beans_hint or "", "")
