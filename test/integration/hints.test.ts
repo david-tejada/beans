@@ -260,24 +260,68 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(await focusKept(editor)).toBe(true);
 	});
 
-	it("scrolls the document most of a screen with editor.smoothScrolling", async () => {
+	it("scrolls the document most of a screen with editor.smoothScrolling, after a mouse wheel", async (context) => {
 		editor.setSettings({ "editor.smoothScrolling": true });
 		try {
 			await openOnly(editor, "long.txt");
-			// Nothing on the page says the setting has arrived; the editor reads
-			// its settings file within a moment.
-			await new Promise((resolve) => setTimeout(resolve, 2000));
+			await scrollAndSettle(editor, { direction: "top", hint: "", place: "document" });
+			// Monaco animates a wheel event once a run of them looks like a
+			// mouse's: whole notches, all alike. Those notches show both that the
+			// setting has arrived and that Monaco is smoothing. VS Code 1.90
+			// doesn't smooth these synthetic notches, so there's nothing to test.
+			const smoothing = await editor.waitFor(mouseWheelAnimates, "the editor to smooth a mouse wheel", 15_000).then(
+				() => true,
+				() => false,
+			);
+			if (!smoothing) context.skip("the editor doesn't smooth a synthetic mouse wheel");
 			const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
-			// A few in a row, since Monaco only takes a run of wheel events for
-			// a mouse's, and smooths those.
-			for (let scroll = 0; scroll < 3; scroll++) {
-				const before = await editor.evaluate<number[]>(splitScrolls);
-				await editor.press(SCROLL_KEY);
-				const after = await settledScrolls(editor, before);
-				const moved = (after[0] ?? 0) - (before[0] ?? 0);
-				expect(moved, `scroll ${scroll + 1}`).toBeGreaterThan(0.8 * height - lineHeight - 1);
-				expect(moved, `scroll ${scroll + 1}`).toBeLessThan(0.8 * height + 1);
+			const before = await settledScroll(editor);
+			const cut = await editor.evaluate<number>(topLineCut);
+			await scrollAndSettle(editor, { direction: "down", hint: "", place: "document" });
+			expect((await settledScroll(editor)) - before).toBe(pagePixels(height, lineHeight));
+			expect(await editor.evaluate<number>(topLineCut), "the top line's cut").toBeCloseTo(cut, 0);
+		} finally {
+			editor.setSettings({});
+		}
+	});
+
+	it("moves two pages for two scrolls said close together", async () => {
+		await openOnly(editor, "long.txt");
+		await scrollAndSettle(editor, { direction: "top", hint: "", place: "document" });
+		const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
+		// The second arrives while the first is still lining up its lines.
+		await sendScroll(editor, { direction: "down", hint: "", place: "document" });
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		await scrollAndSettle(editor, { direction: "down", hint: "", place: "document" });
+		expect(await settledScroll(editor)).toBe(2 * pagePixels(height, lineHeight));
+	});
+
+	it("stops at the top, with the first line whole, from a start that isn't whole lines", async () => {
+		await openOnly(editor, "long.txt");
+		await scrollAndSettle(editor, { direction: "top", hint: "", place: "document" });
+		await nudgeOffLines(editor, 1);
+
+		await scrollAndSettle(editor, { direction: "up", hint: "", place: "document" });
+		expect(await settledScroll(editor)).toBe(0);
+	});
+
+	it("stops at the end, with the last line in sight, without editor.scrollBeyondLastLine", async () => {
+		editor.setSettings({ "editor.scrollBeyondLastLine": false });
+		try {
+			await openOnly(editor, "long.txt");
+			// The setting has arrived when the bottom shows a screenful, not only the last line.
+			let screenful = false;
+			for (let attempt = 0; attempt < 10 && !screenful; attempt++) {
+				await scrollAndSettle(editor, { direction: "bottom", hint: "", place: "document" });
+				screenful = await editor.evaluate<boolean>(`(${lastLineInSight}) && (${topLine}) < ${LONG_TXT_LINES - 5}`);
 			}
+			expect(screenful, "the end to show a screenful").toBe(true);
+			const end = await settledScroll(editor);
+			await nudgeOffLines(editor, -1);
+
+			await scrollAndSettle(editor, { direction: "down", hint: "", place: "document" });
+			expect(await settledScroll(editor)).toBe(end);
+			expect(await editor.evaluate<boolean>(lastLineInSight)).toBe(true);
 		} finally {
 			editor.setSettings({});
 		}
@@ -326,23 +370,30 @@ describe(`Beans in a real ${dom.name}`, () => {
 	});
 });
 
-// A file long enough that Monaco shifts its lines back past each 500,000px
-// (see scrollBy in src/page/scroll.ts). With 18px lines and the room to
-// scroll the last line to the top, the bottom is 2,000,016px down: just
-// past a shift, so a page up from there crosses it. 18 doesn't divide
-// 500,000, so the shift isn't a round number there: 1,499,994px below it,
-// 1,999,998px past it.
-const LONG_FILE_LINES = 111_113;
+// Files long enough that Monaco shifts its lines back past each 500,000px
+// (see scrollBy in src/page/scroll.ts). 18px lines don't divide 500,000,
+// so the shift isn't a round number: 1,499,994px below 2,000,000px,
+// 1,999,998px past it. With the room to scroll the last line to the top,
+// huge.txt's bottom is 2,003,004px down, more than a page past the shift,
+// and edge.txt's 2,000,016px, just past it.
+const HUGE_LINES = 111_279;
+const EDGE_LINES = 111_113;
+const SHIFT_AT_LINE = 2_000_000 / 18 + 1;
 
-describe(`Beans in a real ${dom.name}, in a file of ${LONG_FILE_LINES} lines`, () => {
+describe(`Beans in a real ${dom.name}, in files of over ${EDGE_LINES} lines`, () => {
 	let editor: Editor;
 	let workspace: string;
 
 	beforeAll(async () => {
 		workspace = fs.mkdtempSync(path.join(os.tmpdir(), "beans-long-"));
-		const lines = Array.from({ length: LONG_FILE_LINES }, (_, index) => `Line ${index + 1}`);
-		// No newline at the end, so the last line has text to look for.
-		fs.writeFileSync(path.join(workspace, "huge.txt"), lines.join("\n"));
+		for (const [name, count] of [
+			["huge.txt", HUGE_LINES],
+			["edge.txt", EDGE_LINES],
+		] as const) {
+			const lines = Array.from({ length: count }, (_, index) => `Line ${index + 1}`);
+			// No newline at the end, so the last line has text to look for.
+			fs.writeFileSync(path.join(workspace, name), lines.join("\n"));
+		}
 		editor = await startEditor(workspace);
 		editor.setSettings({ "editor.lineHeight": 18, "editor.scrollBeyondLastLine": true });
 	});
@@ -352,30 +403,53 @@ describe(`Beans in a real ${dom.name}, in a file of ${LONG_FILE_LINES} lines`, (
 		if (workspace) fs.rmSync(workspace, { recursive: true, force: true });
 	});
 
-	it("reaches the last and the first line, and moves 80% of a screen deep in the file", async () => {
+	it("reaches the last and the first line, and moves 80% of a screen, in whole lines, across the shift", async () => {
 		await openOnly(editor, "huge.txt");
 		await editor.waitFor(`${editorSize}.lineHeight === 18`, "the 18px lines setting");
 		const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
-		const page = Math.floor((0.8 * height) / lineHeight);
+		const page = pagePixels(height, lineHeight) / lineHeight;
 
 		await sendScroll(editor, { direction: "bottom", hint: "", place: "document" });
-		await editor.waitFor(lineShown(LONG_FILE_LINES), "the last line");
-		const bottom = await settledTopLine(editor);
+		await editor.waitFor(lineShown(HUGE_LINES), "the last line");
+		let line = await settledTopLine(editor);
 		const cut = await editor.evaluate<number>(topLineCut);
 
-		// Both cross the shift, and move whole lines: the top line is cut as before.
-		await sendScroll(editor, { direction: "up", hint: "", place: "document" });
-		const up = await settledTopLine(editor, bottom);
-		expect(bottom - up, `${bottom} up to ${up}`).toBe(page);
-		expect(await editor.evaluate<number>(topLineCut), "the top line's cut after a page up").toBeCloseTo(cut, 0);
-
+		// Up a page at a time until one crosses the shift, then down across it
+		// again, a page short of the bottom so the end doesn't stop it.
+		while (line >= SHIFT_AT_LINE) {
+			await sendScroll(editor, { direction: "up", hint: "", place: "document" });
+			const up = await settledTopLine(editor, line);
+			expect(line - up, `${line} up to ${up}`).toBe(page);
+			expect(await editor.evaluate<number>(topLineCut), `the top line's cut at ${up}`).toBeCloseTo(cut, 0);
+			line = up;
+		}
 		await sendScroll(editor, { direction: "down", hint: "", place: "document" });
-		const down = await settledTopLine(editor, up);
-		expect(down - up, `${up} down to ${down}`).toBe(page);
+		const down = await settledTopLine(editor, line);
+		expect(down - line, `${line} down to ${down}`).toBe(page);
 		expect(await editor.evaluate<number>(topLineCut), "the top line's cut after a page down").toBeCloseTo(cut, 0);
 
 		await sendScroll(editor, { direction: "top", hint: "", place: "document" });
 		await editor.waitFor(lineShown(1), "the first line");
+	});
+
+	it("stops at the end when a page down crosses the shift and reaches it", async () => {
+		await openOnly(editor, "edge.txt");
+		await editor.waitFor(`${editorSize}.lineHeight === 18`, "the 18px lines setting");
+		await sendScroll(editor, { direction: "bottom", hint: "", place: "document" });
+		await editor.waitFor(lineShown(EDGE_LINES), "the last line");
+		const bottom = await settledTopLine(editor);
+		await sendScroll(editor, { direction: "up", hint: "", place: "document" });
+		await settledTopLine(editor, bottom);
+		// A page up from the bottom leaves the view just a page above it, below
+		// the shift. One mouse notch down from there: not a whole number of
+		// lines, still below the shift, and less than a page from the bottom,
+		// so the page down crosses the shift and the end stops it.
+		await nudge(editor, 1);
+		await settledTopLine(editor);
+
+		await scrollAndSettle(editor, { direction: "down", hint: "", place: "document" });
+		expect(await settledTopLine(editor)).toBe(EDGE_LINES);
+		expect(await editor.evaluate<number>(topLineCut)).toBeCloseTo(0, 0);
 	});
 });
 
@@ -495,6 +569,82 @@ async function settled<T>(editor: Editor, expression: string): Promise<T> {
 		last = now;
 	}
 	return last;
+}
+
+// The lines in long.txt.
+const LONG_TXT_LINES = 400;
+
+// How far a page moves a text editor this tall: 80% of it, in whole lines.
+function pagePixels(height: number, lineHeight: number): number {
+	return Math.floor((0.8 * height) / lineHeight) * lineHeight;
+}
+
+// The first text editor's lines, which move by style.top as it scrolls.
+const shownLines = `document.querySelector(${JSON.stringify(`${dom.editorSplit} ${dom.editorLines}`)})`;
+
+// A mouse wheel's notches: deltaY 120 a notch, down for a positive count.
+// A synthetic event reads with the opposite sign of a real one (see
+// scrollBy in src/page/scroll.ts).
+const wheelNotches = (notches: number) =>
+	`${shownLines}.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, view: window, deltaY: ${-120 * notches}, deltaMode: 0 }))`;
+
+async function nudge(editor: Editor, notches: number): Promise<void> {
+	await editor.evaluate(wheelNotches(notches));
+}
+
+/**
+ * Turns the wheel a notch at a time, as a mouse would, until the view is a
+ * few pixels short of half a line past whole lines from where it was: a
+ * start that a scroll which lines up the top line wrongly would pull away
+ * from an end.
+ */
+async function nudgeOffLines(editor: Editor, notches: 1 | -1): Promise<void> {
+	const { lineHeight } = await editor.evaluate<EditorSize>(editorSize);
+	const from = await settledScroll(editor);
+	for (let notch = 0; notch < 10; notch++) {
+		await nudge(editor, notches);
+		const off = Math.abs((await settledScroll(editor)) - from) % lineHeight;
+		if (off > 1 && off < lineHeight / 2 - 1) return;
+	}
+	throw new Error("the wheel never left the view a part of a line from where it was");
+}
+
+// Turns a few notches up and down, then whether a last one down moved the
+// lines over several frames, as a smoothed scroll does, rather than at once.
+const mouseWheelAnimates = `(async () => {
+	const frame = () => new Promise((done) => requestAnimationFrame(done));
+	for (const notches of [-1, 1, -1]) {
+		${shownLines}.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, view: window, deltaY: -120 * notches, deltaMode: 0 }));
+		for (let wait = 0; wait < 15; wait++) await frame();
+	}
+	${wheelNotches(1)};
+	const seen = new Set();
+	for (let wait = 0; wait < 12; wait++) {
+		await frame();
+		seen.add(${shownLines}.style.top);
+	}
+	return seen.size > 2;
+})()`;
+
+// Whether the last line of the file is wholly in sight.
+const lastLineInSight = `(() => {
+	const box = document.querySelector(${JSON.stringify(dom.textEditor)}).getBoundingClientRect();
+	const last = [...document.querySelectorAll(${JSON.stringify(dom.editorLine)})].find((line) => /\\d+/.exec(line.textContent)?.[0] === ${JSON.stringify(String(LONG_TXT_LINES))});
+	const lineBox = last?.getBoundingClientRect();
+	return !!lineBox && lineBox.top >= box.top && lineBox.bottom <= box.bottom + 0.5;
+})()`;
+
+// Sends a scroll, then waits for the lines to stop moving, whether or not
+// they moved: at an end they don't.
+async function scrollAndSettle(editor: Editor, request: ScrollRequest): Promise<void> {
+	await sendScroll(editor, request);
+	await new Promise((resolve) => setTimeout(resolve, 300));
+	await settledScroll(editor);
+}
+
+// The first split's scroll position, once it has stopped changing.
+async function settledScroll(editor: Editor): Promise<number> {
+	return (await settled<number[]>(editor, splitScrolls))[0] ?? 0;
 }
 
 async function markFocus(editor: Editor): Promise<void> {
