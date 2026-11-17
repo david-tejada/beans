@@ -68,19 +68,26 @@ function nextDeltaY(sent: Sent[], distance: number, lineHeight: number, position
 	const [crossing] = crossings;
 	// Down across a shift, style.top drops by about 500,000px; up, it rises.
 	const across = crossings.reduce((sum, { raw }) => sum + Math.sign(raw), 0);
+	// An event of this many units narrows the ratio enough that, across the
+	// biggest crossing event, its two moves (a line apart) can't both fit,
+	// with a pixel and a half to spare for rounding.
 	const size = Math.ceil(Math.max(0, ...crossings.map(({ deltaY }) => Math.abs(deltaY))) / (lineHeight / 2 - 1.5));
 	const told =
 		shifts.length === 1 ||
 		sent.some(({ deltaY, raw }) => Math.abs(raw) <= MONACO_SHIFT / 2 && Math.abs(deltaY) >= size);
 	if (crossing && !told) {
 		// Below the shift after going down across it: back up across it.
+		// The shift is within a line of where style.top reads 0; two lines
+		// past it, and half again for a guessed ratio, which is harmless there.
 		if (across < 0) return deltaYFor(-(position + 2 * lineHeight) * 1.5, ratio.pixels);
 		// Above it: on up, away from it (a synthetic event's deltaY is
 		// positive going up).
 		if (across > 0 || crossing.raw < 0) return size;
 	}
 	const rest = distance - movedWith(sent, shifts[0] ?? 0);
-	return Math.abs(rest) < 0.5 ? 0 : deltaYFor(rest, ratio.pixels);
+	// Aim with the largest ratio the events allow, so the move can't pass the rest.
+	const aim = ratio.range ? -ratio.range.hi : ratio.pixels;
+	return Math.abs(rest) < 0.5 ? 0 : deltaYFor(rest, aim);
 }
 
 /**
@@ -114,8 +121,10 @@ function wheelRatio(sent: Sent[]): Ratio | null {
 		hi: Math.min(...ranges.map(({ hi }) => hi)),
 	};
 	if (range.lo >= range.hi) {
-		const biggest = ranges.reduce((best, next) => (next.units > best.units ? next : best));
-		range = { lo: biggest.lo, hi: biggest.hi };
+		// An end only shortens a move, so an event whose ratio is too low for
+		// another's was stopped by one.
+		const kept = ranges.filter(({ hi }) => hi >= range.lo);
+		range = { lo: Math.max(...kept.map(({ lo }) => lo)), hi: Math.min(...kept.map(({ hi }) => hi)) };
 	}
 	return { pixels: -(range.lo + range.hi) / 2, range };
 }
@@ -154,7 +163,8 @@ function possibleShifts(sent: Sent[], ratio: Ratio | null, lineHeight: number, d
 		if (Math.abs(raw) <= MONACO_SHIFT / 2) continue;
 		// The event moved as far as the ratio says, or less where an end
 		// stopped it, but never more.
-		const most = Math.ceil(range.hi * Math.abs(deltaY));
+		// Monaco's float arithmetic can round an exact whole number of pixels up one more.
+		const most = Math.ceil(range.hi * Math.abs(deltaY)) + 1;
 		const least = Math.ceil(range.lo * Math.abs(deltaY));
 		const possible = shifts.filter((shift) => Math.abs(moveOf(raw, shift)) <= most);
 		const fits = possible.filter((shift) => Math.abs(moveOf(raw, shift)) >= least);
@@ -186,3 +196,35 @@ function deltaYFor(rest: number, ratio: number): number {
 }
 
 const MONACO_SHIFT = 500_000;
+
+/** A reading of the lines' scroll position, and when it was taken, in ms. */
+export interface Reading {
+	time: number;
+	position: number;
+}
+
+/**
+ * Whether the lines have stopped moving, from a reading before the first
+ * frame and one each frame since, after a wheel event sent at wheelTime.
+ * Two frames without a change, before any. After a change, a frame
+ * without one, as when Monaco moves the lines whole on the next frame.
+ * But a move that shows over more than one frame, or starts late, is
+ * Monaco smoothing it: over 135ms, easing out and cutting each frame to a
+ * whole pixel, so near the end a frame often reads the same as the last
+ * one. Then it's done once 150ms have passed since the event.
+ */
+export function linesSettled(readings: Reading[], wheelTime: number): boolean {
+	const changes: number[] = [];
+	for (let index = 1; index < readings.length; index++) {
+		if (readings[index]?.position !== readings[index - 1]?.position) changes.push(index);
+	}
+	const last = readings.length - 1;
+	const [first] = changes;
+	if (first === undefined) return last >= 2;
+	if (changes.at(-1) === last) return false;
+	const smoothed = changes.length > 1 || first > 1;
+	return !smoothed || (readings[last]?.time ?? 0) >= wheelTime + SMOOTHING_MS;
+}
+
+// Monaco smooths a wheel over 135ms; a little more, for the last frame.
+const SMOOTHING_MS = 150;

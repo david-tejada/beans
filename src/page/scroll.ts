@@ -1,7 +1,7 @@
 import type { ScrollPlace, ScrollRequest } from "../requests";
 import { nextFrame } from "./click";
 import { pageDistance } from "./page-distance";
-import { scrollLines, type LinesView } from "./scroll-lines";
+import { linesSettled, scrollLines, type LinesView, type Reading } from "./scroll-lines";
 import { openQuickInput, sidebarRowWithHint, sidebars } from "./rows";
 import { SELECTORS } from "./selectors";
 import { splitOnSide } from "./split-on-side";
@@ -209,30 +209,29 @@ async function scrollEditor(rows: HTMLElement, distance: number, lineHeight: num
 function linesView(rows: HTMLElement): LinesView {
 	const fileOf = () => rows.closest(SELECTORS.editor)?.getAttribute(SELECTORS.editorFileAttribute) ?? null;
 	const file = fileOf();
+	// Before any event, motion still going is a mouse wheel's, smoothed or not.
+	let wheelTime = performance.now();
 	return {
-		settled: () => settledPosition(rows),
-		wheel: (deltaY) => wheel(rows, deltaY),
+		settled: () => settledPosition(rows, wheelTime),
+		wheel: (deltaY) => {
+			wheelTime = performance.now();
+			wheel(rows, deltaY);
+		},
 		gone: () => !rows.isConnected || fileOf() !== file,
 	};
 }
 
-/**
- * The scroll position once the lines have stopped moving: a frame without
- * a change after one with, or two without any. Monaco moves them on the
- * next frame, or over about 135ms when it smooths a wheel. Gives up after
- * half a second.
- */
-async function settledPosition(rows: HTMLElement): Promise<number> {
+// The scroll position once the lines have stopped moving (see
+// linesSettled), after a wheel event sent at this time. Gives up after
+// half a second.
+async function settledPosition(rows: HTMLElement, wheelTime: number): Promise<number> {
 	const deadline = performance.now() + 500;
-	let last = scrollPosition(rows);
-	let moved = false;
-	for (let still = 0; still < (moved ? 1 : 2) && performance.now() < deadline;) {
+	const readings: Reading[] = [{ time: performance.now(), position: scrollPosition(rows) }];
+	while (!linesSettled(readings, wheelTime) && performance.now() < deadline) {
 		await nextFrame();
-		const now = scrollPosition(rows);
-		if (now === last) still += 1;
-		else [moved, still, last] = [true, 0, now];
+		readings.push({ time: performance.now(), position: scrollPosition(rows) });
 	}
-	return last;
+	return readings.at(-1)?.position ?? scrollPosition(rows);
 }
 
 function wheel(rows: HTMLElement, deltaY: number): void {
