@@ -269,11 +269,9 @@ describe(`Beans in a real ${dom.name}`, () => {
 			// mouse's: whole notches, all alike. Those notches show both that the
 			// setting has arrived and that Monaco is smoothing. VS Code 1.90
 			// doesn't smooth these synthetic notches, so there's nothing to test.
-			const smoothing = await editor.waitFor(mouseWheelAnimates, "the editor to smooth a mouse wheel", 15_000).then(
-				() => true,
-				() => false,
-			);
-			if (!smoothing) context.skip("the editor doesn't smooth a synthetic mouse wheel");
+			if (EDITOR_KIND === "vscode" && process.env.VSCODE_VERSION?.startsWith("1.90."))
+				context.skip("VS Code 1.90 doesn't smooth a synthetic mouse wheel");
+			await editor.waitFor(mouseWheelAnimates, "the editor to smooth a mouse wheel");
 			const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
 			const before = await settledScroll(editor);
 			const cut = await editor.evaluate<number>(topLineCut);
@@ -289,10 +287,16 @@ describe(`Beans in a real ${dom.name}`, () => {
 		await openOnly(editor, "long.txt");
 		await scrollAndSettle(editor, { direction: "top", hint: "", place: "document" });
 		const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
-		// The second arrives while the first is still lining up its lines.
-		await sendScroll(editor, { direction: "down", hint: "", place: "document" });
-		await new Promise((resolve) => setTimeout(resolve, 50));
-		await scrollAndSettle(editor, { direction: "down", hint: "", place: "document" });
+		// The second arrives the frame the first's first event moves the
+		// lines, while it's still measuring.
+		const down: ScrollRequest = { direction: "down", hint: "", place: "document" };
+		await editor.evaluate(`(async () => {
+			${writeScroll(down)};
+			while (!((${splitScrolls})[0] > 0)) await new Promise((done) => requestAnimationFrame(done));
+			${writeScroll(down)};
+		})()`);
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		await settledScroll(editor);
 		expect(await settledScroll(editor)).toBe(2 * pagePixels(height, lineHeight));
 	});
 
@@ -371,14 +375,18 @@ describe(`Beans in a real ${dom.name}`, () => {
 });
 
 // Files long enough that Monaco shifts its lines back past each 500,000px
-// (see scrollBy in src/page/scroll.ts). 18px lines don't divide 500,000,
-// so the shift isn't a round number: 1,499,994px below 2,000,000px,
-// 1,999,998px past it. With the room to scroll the last line to the top,
-// huge.txt's bottom is 2,003,004px down, more than a page past the shift,
-// and edge.txt's 2,000,016px, just past it.
+// (see src/page/scroll-lines.ts). 18px lines don't divide 500,000, so a
+// shift is one of two numbers of lines, depending on which it is: 499,986px
+// at 500,000px, then 500,004px at 2,000,000px. With the room to scroll the
+// last line to the top, huge.txt's bottom is 2,003,004px down, more than a
+// page past that shift, and edge.txt's 2,000,016px, just past it.
+// first.txt passes the first shift, where the line at 500,004px is the
+// first past it.
 const HUGE_LINES = 111_279;
 const EDGE_LINES = 111_113;
+const FIRST_LINES = 28_000;
 const SHIFT_AT_LINE = 2_000_000 / 18 + 1;
+const FIRST_SHIFT_LINE = 500_004 / 18 + 1;
 
 describe(`Beans in a real ${dom.name}, in files of over ${EDGE_LINES} lines`, () => {
 	let editor: Editor;
@@ -389,6 +397,7 @@ describe(`Beans in a real ${dom.name}, in files of over ${EDGE_LINES} lines`, ()
 		for (const [name, count] of [
 			["huge.txt", HUGE_LINES],
 			["edge.txt", EDGE_LINES],
+			["first.txt", FIRST_LINES],
 		] as const) {
 			const lines = Array.from({ length: count }, (_, index) => `Line ${index + 1}`);
 			// No newline at the end, so the last line has text to look for.
@@ -430,6 +439,33 @@ describe(`Beans in a real ${dom.name}, in files of over ${EDGE_LINES} lines`, ()
 
 		await sendScroll(editor, { direction: "top", hint: "", place: "document" });
 		await editor.waitFor(lineShown(1), "the first line");
+	});
+
+	it("moves 80% of a screen exactly when a page's first event crosses the first shift", async () => {
+		await openOnly(editor, "first.txt");
+		await editor.waitFor(`${editorSize}.lineHeight === 18`, "the 18px lines setting");
+		const { height, lineHeight } = await editor.evaluate<EditorSize>(editorSize);
+		const page = pagePixels(height, lineHeight) / lineHeight;
+		await sendScroll(editor, { direction: "bottom", hint: "", place: "document" });
+		await editor.waitFor(lineShown(FIRST_LINES), "the last line");
+
+		// A few lines before the shift, so the first event of a page down
+		// crosses it, then a few lines past it, for a page up.
+		for (const [direction, from, to] of [
+			["down", FIRST_SHIFT_LINE - 5, FIRST_SHIFT_LINE - 1],
+			["up", FIRST_SHIFT_LINE + 1, FIRST_SHIFT_LINE + 5],
+		] as const) {
+			await wheelToLines(editor, from, to, page);
+			const line = await settledTopLine(editor);
+			const cut = await editor.evaluate<number>(topLineCut);
+			await sendScroll(editor, { direction, hint: "", place: "document" });
+			const after = await settledTopLine(editor, line);
+			expect(Math.abs(after - line), `${direction} from ${line} to ${after}`).toBe(page);
+			expect(await editor.evaluate<number>(topLineCut), `the top line's cut after a page ${direction}`).toBeCloseTo(
+				cut,
+				0,
+			);
+		}
 	});
 
 	it("stops at the end when a page down crosses the shift and reaches it", async () => {
@@ -537,17 +573,20 @@ async function pressUntil(editor: Editor, key: Key, expression: string, what: st
 // beans.scroll takes where to scroll as its third. Only the text changes,
 // so the editor can still show the extension's next request.
 async function sendScroll(editor: Editor, request: ScrollRequest): Promise<void> {
-	await editor.evaluate(`(() => {
-		const channel = document.getElementById(window.__beansChannelId);
-		const walker = document.createTreeWalker(channel, NodeFilter.SHOW_TEXT);
-		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-			if (node.data.includes("beans:")) node.data = "beans:" + Date.now() + ":scroll:" + ${JSON.stringify(scrollChannelText(request))};
-		}
-	})()`);
+	await editor.evaluate(writeScroll(request));
 }
 
+// An expression that writes a scroll request into the channel.
+const writeScroll = (request: ScrollRequest) => `(() => {
+	const channel = document.getElementById(window.__beansChannelId);
+	const walker = document.createTreeWalker(channel, NodeFilter.SHOW_TEXT);
+	for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+		if (node.data.includes("beans:")) node.data = "beans:" + Date.now() + ":scroll:" + ${JSON.stringify(scrollChannelText(request))};
+	}
+})()`;
+
 // Waits for the splits' scroll positions to change from these and stop
-// changing: Beans corrects its first wheel event on the next frame.
+// changing: Beans measures each wheel event once the lines stop moving.
 async function settledScrolls(editor: Editor, before: number[]): Promise<number[]> {
 	await editor.waitFor(`JSON.stringify(${splitScrolls}) !== ${JSON.stringify(JSON.stringify(before))}`, "a scroll");
 	return settled(editor, splitScrolls);
@@ -590,6 +629,22 @@ const wheelNotches = (notches: number) =>
 
 async function nudge(editor: Editor, notches: number): Promise<void> {
 	await editor.evaluate(wheelNotches(notches));
+}
+
+// Pages up to within a page of these lines, then turns the wheel a notch at
+// a time until the first line in sight is between them.
+async function wheelToLines(editor: Editor, from: number, to: number, page: number): Promise<void> {
+	let line = await settledTopLine(editor);
+	while (line - to > page) {
+		await sendScroll(editor, { direction: "up", hint: "", place: "document" });
+		line = await settledTopLine(editor, line);
+	}
+	for (let notch = 0; notch < 60; notch++) {
+		if (line >= from && line <= to) return;
+		await nudge(editor, line < from ? 1 : -1);
+		line = await settledTopLine(editor);
+	}
+	throw new Error(`the wheel never brought line ${from} to ${to} to the top`);
 }
 
 /**

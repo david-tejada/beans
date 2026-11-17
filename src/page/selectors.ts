@@ -79,6 +79,9 @@ const VSCODE = {
 	// Monaco's lines, which it moves by style.top as it scrolls, and one line.
 	editorLines: ".lines-content",
 	editorLine: ".view-line",
+	// The attribute of an editor that names the file it shows, which
+	// changes when its split switches tabs.
+	editorFileAttribute: "data-uri",
 	// An editor split (VS Code's editor group), and the one with the focus,
 	// or the one that had it last while the focus is in a sidebar.
 	editorGroup: ".editor-group-container",
@@ -162,6 +165,7 @@ const THEIA: typeof VSCODE = {
 	editor: ".monaco-editor",
 	editorLines: ".lines-content",
 	editorLine: ".view-line",
+	editorFileAttribute: "data-uri",
 	// The editor shown in each split of the main area; the others are hidden.
 	editorGroup: "#theia-main-content-panel > .lm-DockPanel-widget:not(.lm-mod-hidden)",
 	// Theia marks the tab bar of the split with the focus, or that had it

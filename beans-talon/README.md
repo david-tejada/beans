@@ -57,7 +57,7 @@ The left split is the one furthest to the left, and the right split the one furt
 
 `side` is there because `downer bar` can sound like `downer bat` to Talon, for people whose word for B is "bat". To change these words, edit `beans_scroll_place.talon-list`.
 
-Webview editors, such as the Markdown preview and images, can't be scrolled. Neither can floating editor windows: Beans only runs in VS Code's main window, so `downer` there scrolls the main window's split. With VS Code's `workbench.list.smoothScrolling` on, a list's scroll falls a little short.
+Webview editors, such as the Markdown preview and images, can't be scrolled. Neither can floating editor windows: Beans only runs in VS Code's main window, so `downer` there scrolls the main window's split. With VS Code's `workbench.list.smoothScrolling` on, a list's scroll falls a little short. With `editor.mouseWheelScrollSensitivity` above 1.2, a document's scroll can land a pixel off, and in a very long file (over about 27,800 lines), near an end, it can now and then stop up to a line from it.
 
 ### Targets
 

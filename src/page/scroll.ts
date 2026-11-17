@@ -1,6 +1,7 @@
 import type { ScrollPlace, ScrollRequest } from "../requests";
 import { nextFrame } from "./click";
 import { pageDistance } from "./page-distance";
+import { scrollLines, type LinesView } from "./scroll-lines";
 import { openQuickInput, sidebarRowWithHint, sidebars } from "./rows";
 import { SELECTORS } from "./selectors";
 import { splitOnSide } from "./split-on-side";
@@ -152,20 +153,19 @@ function splitBelow(mark: HTMLElement, splits: HTMLElement[]): HTMLElement | nul
 }
 
 /**
- * Scrolls a list's rows, or an editor's lines, by about this many pixels
- * (positive is down). For an editor, lineHeight makes the move exact.
+ * Scrolls a list's rows by about this many pixels (positive is down), or,
+ * given their height, an editor's lines exactly (see scrollLines).
  *
  * VS Code's lists and editors draw their own scrollbar and only react to
- * wheel events. How far a wheel event moves them depends on the screen's
- * pixel ratio and VS Code's settings, and a synthetic event even reads
- * with the opposite sign, so this sends one event, measures how far it
- * went, and sends another for the rest (see scrollLinesBy for an editor).
+ * wheel events, which move them by an amount that depends on the screen
+ * and the settings, and a synthetic one even reads with the opposite sign,
+ * so this measures how far an event went and sends another for the rest.
  */
 export function scrollBy(rows: HTMLElement, distance: number, lineHeight = 0): void {
+	if (lineHeight > 0) void inTurn(() => scrollEditor(rows, distance, lineHeight));
 	// To the top or the bottom, one event far past the end does it, and the
-	// view stops there.
-	if (Math.abs(distance) >= TO_THE_END) wheel(rows, -distance);
-	else if (lineHeight > 0) void scrollLinesBy(rows, distance, lineHeight);
+	// list stops there.
+	else if (Math.abs(distance) >= TO_THE_END) wheel(rows, -distance);
 	else scrollRowsBy(rows, distance);
 }
 
@@ -183,84 +183,54 @@ function scrollRowsBy(rows: HTMLElement, distance: number): void {
 	else void nextFrame().then(finish);
 }
 
-// The editor scrolls in progress, one after another: a scroll said while
-// the last is still moving waits for it, so each moves its full page.
+// The editor scrolls, one after another: a scroll said while the last is
+// still moving waits for it, so each moves its full page from where the
+// last left off. One that failed doesn't hold up the next.
 let editorScrolls = Promise.resolve();
 
-/**
- * Scrolls an editor's lines by this many pixels, a whole number of lines,
- * in up to three events, waiting after each for the lines to stop moving,
- * since Monaco smooths a wheel event it takes for a mouse's. Stops where
- * the view reaches an end, or when the editor goes away.
- */
-function scrollLinesBy(rows: HTMLElement, distance: number, lineHeight: number): Promise<void> {
-	// One that failed doesn't hold up the next.
-	editorScrolls = editorScrolls.catch(() => {}).then(() => scrollLinesNow(rows, distance, lineHeight));
+function inTurn(job: () => Promise<void>): Promise<void> {
+	editorScrolls = editorScrolls.catch(() => {}).then(job);
 	return editorScrolls;
 }
 
-async function scrollLinesNow(rows: HTMLElement, distance: number, lineHeight: number): Promise<void> {
-	// Lines still moving, from a mouse wheel, would show in the readings.
-	const start = await settledPosition(rows);
-	if (!rows.isConnected) return;
-	const first = -distance;
-	wheel(rows, first);
-	const afterFirst = await settledPosition(rows);
-	if (!rows.isConnected) return;
-	const firstMoves = possibleMoves(afterFirst - start, lineHeight);
-	const [guess] = firstMoves;
-	if (!guess) return;
-	// The rest, at the ratio the first event seems to have moved by.
-	const second = Math.round(((distance - guess) * first) / guess);
-	if (second === 0) return;
-	wheel(rows, second);
-	const secondMoves = possibleMoves((await settledPosition(rows)) - afterFirst, lineHeight);
-	if (!rows.isConnected) return;
-	// Wheel events move in proportion, so the two moves agree on the ratio.
-	// When no pair of them does, the view stopped at an end (or something
-	// else moved it), and it stays where it is.
-	const pairs = firstMoves.flatMap((moved) =>
-		secondMoves.filter((then) => Math.abs((second * moved) / first - then) <= 3).map((then) => [moved, then]),
-	);
-	const [pair] = pairs;
-	if (pairs.length !== 1 || !pair) return;
-	const [moved = 0, then = 0] = pair;
-	// Monaco moves by whole steps of a fraction of a pixel, and can stop a
-	// pixel short.
-	const rest = distance - moved - then;
-	if (Math.abs(rest) >= 0.5 && Math.abs(rest) <= lineHeight / 2) wheel(rows, Math.round((rest * first) / moved));
+async function scrollEditor(rows: HTMLElement, distance: number, lineHeight: number): Promise<void> {
+	const view = linesView(rows);
+	if (Math.abs(distance) < TO_THE_END) await scrollLines(view, distance, lineHeight);
+	else if (!view.gone()) view.wheel(-distance);
+	// Still lines for the next scroll to start from.
+	await view.settled();
 }
 
 /**
- * How far an event may have moved the lines, from how far style.top moved.
- * In a long file, Monaco keeps style.top small: each time the view passes
- * another 500,000px, it moves the lines back by about that much, rounded
- * down to whole lines, so the shift is one of two numbers of lines. An
- * event of a page never moves that far, so a bigger move is that shift.
- * The nearer guess comes first.
+ * The lines of the editor these rows are in, for scrollLines. VS Code
+ * keeps one editor for a split and swaps the file it shows, so the editor
+ * counts as gone when it leaves the page or shows another file.
  */
-function possibleMoves(raw: number, lineHeight: number): number[] {
-	if (raw === 0) return [];
-	if (Math.abs(raw) <= MONACO_SHIFT / 2) return [raw];
-	const shift = Math.round(raw / MONACO_SHIFT) * MONACO_SHIFT;
-	const lines = Math.floor(Math.abs(shift) / lineHeight);
-	const [fewer, more] = [lines, lines + 1].map((count) => raw - Math.sign(shift) * count * lineHeight);
-	if (fewer === undefined || more === undefined) return [];
-	const flat = raw - shift;
-	return Math.abs(fewer - flat) <= Math.abs(more - flat) ? [fewer, more] : [more, fewer];
+function linesView(rows: HTMLElement): LinesView {
+	const fileOf = () => rows.closest(SELECTORS.editor)?.getAttribute(SELECTORS.editorFileAttribute) ?? null;
+	const file = fileOf();
+	return {
+		settled: () => settledPosition(rows),
+		wheel: (deltaY) => wheel(rows, deltaY),
+		gone: () => !rows.isConnected || fileOf() !== file,
+	};
 }
 
-const MONACO_SHIFT = 500_000;
-
-// The scroll position once the lines have stopped moving: the same two
-// frames running. Gives up after half a second.
+/**
+ * The scroll position once the lines have stopped moving: a frame without
+ * a change after one with, or two without any. Monaco moves them on the
+ * next frame, or over about 135ms when it smooths a wheel. Gives up after
+ * half a second.
+ */
 async function settledPosition(rows: HTMLElement): Promise<number> {
+	const deadline = performance.now() + 500;
 	let last = scrollPosition(rows);
-	for (let frame = 0, same = 0; frame < 30 && same < 2; frame++) {
+	let moved = false;
+	for (let still = 0; still < (moved ? 1 : 2) && performance.now() < deadline;) {
 		await nextFrame();
 		const now = scrollPosition(rows);
-		same = now === last ? same + 1 : 0;
-		last = now;
+		if (now === last) still += 1;
+		else [moved, still, last] = [true, 0, now];
 	}
 	return last;
 }
