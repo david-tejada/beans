@@ -213,7 +213,7 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(await namesOfThis()).toEqual({ names: ["a.txt"], missing: [] });
 
 		const b = await fileItem("b.txt");
-		await editor.evaluate(`window.__beans.select([${JSON.stringify(b)}])`);
+		await cmdClick([b], true);
 		expect(await namesOfThis()).toEqual({ names: ["a.txt", "b.txt"], missing: [] });
 
 		// With the focus in the editor, "this" is still the Explorer's selection.
@@ -229,8 +229,7 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(point).toEqual(await editor.evaluate<unknown>(`window.__beans.rowPoint(${JSON.stringify(a.hint)})`));
 
 		// Cmd+click (Ctrl+click) takes a selected row out of the selection.
-		await editor.evaluate(`window.__beans.select(${JSON.stringify([a, b])})`);
-		await editor.waitFor(`!document.querySelector(${JSON.stringify(dom.selectedRow)})`, "nothing to be selected");
+		await cmdClick([a, b], false);
 		expect(await namesOfThis()).toEqual({ names: [], missing: ["this"] });
 		expect(await editor.evaluate<unknown>(`window.__beans.rowPoint("this")`)).toBeNull();
 	});
@@ -246,7 +245,7 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(await namesOf([{ from: a.hint, to: "this" }])).toEqual(["a.txt", "b.txt"]);
 
 		// With a and b selected, a range's end is the first of them.
-		await editor.evaluate(`window.__beans.select([${JSON.stringify(a)}])`);
+		await cmdClick([a], true);
 		expect(await namesOf([{ hint: b.hint }, { hint: "this" }])).toEqual(["a.txt", "b.txt"]);
 		expect(await namesOf([{ from: "this", to: a.hint }])).toEqual(["a.txt"]);
 	});
@@ -254,6 +253,10 @@ describe(`Beans in a real ${dom.name}`, () => {
 	it('resolves "this" to the selection of the focused list when that isn\'t the Explorer', async () => {
 		await clickUntilSelected("a.txt");
 		const openEditorsRow = JSON.stringify(dom.openEditorsRow);
+		// The hint of the selected Open Editors row, once Beans has hinted it.
+		const selectedHint = `[...document.querySelectorAll(${openEditorsRow})]
+			.find((row) => row.matches(${JSON.stringify(dom.selectedRow)}) && row.hasAttribute("data-beans-hint"))
+			?.getAttribute("data-beans-hint") ?? null`;
 		if (EDITOR_KIND === "vscode") {
 			// VS Code hides Open Editors; this command shows it and focuses it.
 			editor.setKeybindings([{ key: "ctrl+alt+8", command: "workbench.files.action.focusOpenEditorsView" }]);
@@ -269,29 +272,34 @@ describe(`Beans in a real ${dom.name}`, () => {
 			}
 			if (!shown) throw new Error("Open Editors didn't get the focus");
 		} else {
-			// Theia shows Open Editors collapsed. Clicking a row selects it and
-			// moves the focus to its editor, so the focus goes back to the tree.
+			// Theia shows Open Editors collapsed. A click on one of its rows
+			// isn't a reliable way to select it: a click that selects also
+			// activates that editor, which takes the focus, and with one editor
+			// open Theia rebuilds the Open Editors tree on every change to the
+			// editor area, with nothing selected but the focus mark kept. Down
+			// selects the row after the focused one, so on that lone row it
+			// does nothing. Escape clears the focus mark, and Down then selects
+			// the first row. Which editors are open here depends on the tests
+			// before, so the row is whichever one ends up selected.
 			const header = await editor.waitFor<string>(headerHint("Open Editors"), "the Open Editors header");
 			await editor.evaluate(`window.__beans.setExpanded(${target(header)}, true)`);
-			const selected = `!!document.querySelector(${openEditorsRow})?.matches(${JSON.stringify(dom.selectedRow)})`;
-			for (let attempt = 0; attempt < 5; attempt++) {
-				await editor.waitFor(`!!document.querySelector(${openEditorsRow})`, "a row in Open Editors");
-				await editor.click(dom.openEditorsRow);
-				const isSelected = await editor.waitFor(selected, "the Open Editors row to be selected", 2000).then(
+			await editor.waitFor(`!!document.querySelector(${openEditorsRow})`, "a row in Open Editors");
+			let selected = false;
+			for (let attempt = 0; attempt < 5 && !selected; attempt++) {
+				await editor.evaluate(`document.querySelector("#theia-open-editors-widget").focus()`);
+				await editor.press(KEYS.Escape);
+				await editor.press({ key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+				selected = await editor.waitFor(selectedHint, "a selected row in Open Editors", 2000).then(
 					() => true,
 					() => false,
 				);
-				if (isSelected) break;
 			}
-			await editor.evaluate(`document.querySelector("#theia-open-editors-widget").focus()`);
+			if (!selected) throw new Error("No row in Open Editors got selected from the keyboard");
 		}
-		await editor.waitFor(
-			`[...document.querySelectorAll(${openEditorsRow})].some((row) => row.matches(${JSON.stringify(dom.selectedRow)}) && row.hasAttribute("data-beans-hint"))`,
-			"a selected row in Open Editors to get a hint",
-		);
+		const hint = await editor.waitFor<string>(selectedHint, "a selected row in Open Editors to get a hint");
 		const result = await editor.evaluate<ResolveResult>(`window.__beans.resolve(${target("this")})`);
-		expect({ ...result, items: result.items.map((item) => [path.basename(item.path), item.view]) }).toMatchObject({
-			items: [["a.txt", "openEditors"]],
+		expect({ ...result, items: result.items.map((item) => [item.hint, item.view]) }).toMatchObject({
+			items: [[hint, "openEditors"]],
 			missing: [],
 		});
 
@@ -324,9 +332,18 @@ describe(`Beans in a real ${dom.name}`, () => {
 		fs.mkdirSync(folder, { recursive: true });
 		for (const name of names) fs.writeFileSync(path.join(folder, name), "");
 		try {
-			const hint = await editor.waitFor<string>(rowHint("many"), "the many folder's row");
-			await editor.evaluate(`window.__beans.setExpanded(${target(hint)}, true)`);
-			await editor.waitFor(hasRow("m01.txt"), "the folder's files to show");
+			// The folder's row can show before VS Code will expand it, so this
+			// expands it again until its files show.
+			let expanded = false;
+			for (let attempt = 0; attempt < 5 && !expanded; attempt++) {
+				const hint = await editor.waitFor<string>(rowHint("many"), "the many folder's row");
+				await editor.evaluate(`window.__beans.setExpanded(${target(hint)}, true)`);
+				expanded = await editor.waitFor(hasRow("m01.txt"), "the folder's files to show", 3000).then(
+					() => true,
+					() => false,
+				);
+			}
+			if (!expanded) throw new Error("The many folder didn't expand");
 			await clickUntilSelected("m01.txt");
 			const mac = process.platform === "darwin";
 			// The key can arrive before the list has the focus, so press until it selects.
@@ -368,7 +385,7 @@ describe(`Beans in a real ${dom.name}`, () => {
 
 			// Two rows in the middle of the screen are all there is.
 			await clickUntilSelected("m02.txt");
-			await editor.evaluate(`window.__beans.select([${JSON.stringify(await fileItem("m03.txt"))}])`);
+			await cmdClick([await fileItem("m03.txt")], true);
 			const two = await editor.evaluate<ResolveResult>(`window.__beans.resolve(${target("this")})`);
 			expect(two.selectionRunsPast).toBe(false);
 			expect(two.items.map((item) => path.basename(item.path))).toEqual(["m02.txt", "m03.txt"]);
@@ -392,6 +409,26 @@ describe(`Beans in a real ${dom.name}`, () => {
 				return;
 		}
 		throw new Error(`${name} didn't get selected`);
+	}
+
+	// Cmd+clicks (Ctrl+clicks) Explorer rows, which adds them to the
+	// selection or takes them out, until they show it. Theia redraws its
+	// trees after a debounce, and now and then drops a click, so a row is
+	// clicked again only while it doesn't show the state yet.
+	async function cmdClick(items: { hint: string; path: string }[], selected: boolean): Promise<void> {
+		const shows = (item: { hint: string }) =>
+			`${selected ? "" : "!"}document.querySelector(${JSON.stringify(`${dom.row}[data-beans-hint="${item.hint}"]`)})?.matches(${JSON.stringify(dom.selectedRow)})`;
+		let pending = items;
+		for (let attempt = 0; attempt < 3 && pending.length; attempt++) {
+			await editor.evaluate(`window.__beans.select(${JSON.stringify(pending)})`);
+			await editor.waitFor(pending.map(shows).join(" && "), "the rows to show the click", 2000).catch(() => undefined);
+			const done = await Promise.all(pending.map((item) => editor.evaluate<boolean>(shows(item))));
+			pending = pending.filter((_, i) => !done[i]);
+		}
+		if (pending.length) {
+			const hints = pending.map((item) => item.hint).join(", ");
+			throw new Error(`Cmd+click didn't ${selected ? "select" : "unselect"} the rows with hints ${hints}`);
+		}
 	}
 
 	// What window.__beans.select takes for an Explorer file: its hint and path.
