@@ -333,6 +333,9 @@ describe(`Beans in a real ${dom.name}`, () => {
 
 	it("scrolls the left and right splits without moving the focus", async () => {
 		await openOnly(editor, "long.txt");
+		// Theia 1.77, like VS Code, leaves the focus in the Explorer after a
+		// click opens a file, and the split command needs an active editor.
+		await editor.click(`${dom.editorSplit} ${dom.textEditor}`);
 		await pressUntil(editor, SPLIT_KEY, `(${splitScrolls}).length === 2`, "the editor to split");
 		await editor.waitFor(
 			`(${editorSplits}).every((split) => split.querySelector(${JSON.stringify(dom.editorLine)}))`,
