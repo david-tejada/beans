@@ -298,6 +298,21 @@ describe(`Beans in a real ${dom.name}`, () => {
 		if (EDITOR_KIND === "theia") {
 			const header = await editor.waitFor<string>(headerHint("Open Editors"), "the Open Editors header");
 			await editor.evaluate(`window.__beans.setExpanded(${target(header)}, false)`);
+		} else {
+			// Hide Open Editors again: it sits above the files, so its rows
+			// would come first for a test that looks a row up by its name.
+			editor.setKeybindings([{ key: "ctrl+alt+8", command: "workbench.explorer.openEditorsView.removeView" }]);
+			let hidden = false;
+			for (let attempt = 0; attempt < 5 && !hidden; attempt++) {
+				await editor.press({ key: "8", code: "Digit8", keyCode: 56, ctrl: true, alt: true });
+				hidden = await editor
+					.waitFor(`!(document.querySelector(".open-editors")?.offsetHeight > 0)`, "Open Editors to hide", 3000)
+					.then(
+						() => true,
+						() => false,
+					);
+			}
+			if (!hidden) throw new Error("Open Editors didn't hide");
 		}
 	});
 
