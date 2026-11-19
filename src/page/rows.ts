@@ -21,7 +21,7 @@ export function openQuickInput(): HTMLElement | null {
 /**
  * Rows of these containers that are at least partly on screen, top to
  * bottom, container by container. View headers count as rows too, so
- * "hint <letters>" can expand or collapse a view.
+ * "bean <letters>" can expand or collapse a view.
  */
 export function visibleRows(containers: HTMLElement[]): HTMLElement[] {
 	const rows: HTMLElement[] = [];
