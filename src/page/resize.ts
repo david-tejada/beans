@@ -1,3 +1,4 @@
+import { SELECTION_HINT } from "../requests";
 import type { ResizePart, ResizeRequest, ResizeResult, ResizeTarget } from "../shared/types";
 import { clickRow, nextFrame } from "./click";
 import { sidebarRowWithHint } from "./rows";
@@ -56,7 +57,13 @@ async function resizeTarget(target: ResizeTarget): Promise<ResizeFound> {
 		return { element, axis: isRow ? "height" : "width", name };
 	}
 	const row = sidebarRowWithHint(target.hint);
-	if (!row) return { problem: `no row with hint ${target.hint.toUpperCase()}` };
+	if (!row)
+		return {
+			problem:
+				target.hint === SELECTION_HINT
+					? "no selected row is on screen"
+					: `no row with hint ${target.hint.toUpperCase()}`,
+		};
 	const pane = row.closest<HTMLElement>(SELECTORS.pane);
 	const name = pane?.querySelector(SELECTORS.paneTitle)?.textContent || "view";
 	const element = row.closest<HTMLElement>(SELECTORS.splitViewView);

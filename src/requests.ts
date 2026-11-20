@@ -6,6 +6,12 @@ export { isRecord };
 // Talon's requests arrive through command-server as plain JSON, so each is
 // checked here, once, and the rest of the extension trusts the types.
 
+/**
+ * What beans.py sends in place of a hint when "this" is said: the selected
+ * rows. Real hints are two letters at most, so it can't be one of them.
+ */
+export const SELECTION_HINT = "this";
+
 /** A hint's letters or digits from whatever Talon sent, lower case; "" when there are none. */
 export function hintFrom(value: unknown): string {
 	const text = typeof value === "string" ? value : typeof value === "number" ? String(value) : "";
