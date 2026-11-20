@@ -217,6 +217,8 @@ describe(`Beans in a real ${dom.name}`, () => {
 		expect(await namesOfThis()).toEqual({ names: ["a.txt", "b.txt"], missing: [] });
 
 		// With the focus in the editor, "this" is still the Explorer's selection.
+		// In Theia both rows stay selected only because the test profile turns
+		// explorer.autoReveal off: with it on, Theia selects the open file alone.
 		await editor.waitFor(`!!document.querySelector(${JSON.stringify(dom.editorInput)})`, "an editor to open");
 		await editor.evaluate(`document.querySelector(${JSON.stringify(dom.editorInput)}).focus()`);
 		await editor.waitFor(`document.activeElement?.matches(${JSON.stringify(dom.editorInput)})`, "the editor's focus");

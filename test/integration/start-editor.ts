@@ -196,8 +196,18 @@ const SETUPS: Record<EditorKind, Setup> = {
 			const configDir = path.join(home, "theia");
 			fs.mkdirSync(path.join(configDir, "plugins"), { recursive: true });
 			fs.symlinkSync(ROOT, path.join(configDir, "plugins", "beans"), "junction");
-			// Settings a test sets go on top of these.
-			const baseSettings = { "security.workspace.trust.enabled": false, "workbench.startupEditor": "none" };
+			// Settings a test sets go on top of these. With explorer.autoReveal
+			// on, as it is by default, Theia's Explorer selects the open file
+			// alone whenever the focus moves to an editor from elsewhere, which
+			// undoes a selection a test has just made. When that happens
+			// varies: in our runs 1.76 had the focus in the editor after a
+			// click in the Explorer opened a file, and 1.77 left it in the
+			// Explorer.
+			const baseSettings = {
+				"security.workspace.trust.enabled": false,
+				"workbench.startupEditor": "none",
+				"explorer.autoReveal": false,
+			};
 			const settingsFile = path.join(configDir, "settings.json");
 			writeJson(settingsFile, baseSettings);
 			return {
