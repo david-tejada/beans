@@ -12,6 +12,8 @@ declare global {
 		__beansChannelId?: string;
 		/** The beans.stableHints setting; inject.ts sets it before the script runs. */
 		__beansStableHints?: boolean;
+		/** The beans.tabHints setting; inject.ts sets it before the script runs. */
+		__beansTabHints?: boolean;
 		/** Stops the running copy of the script, for the next one to take over. */
 		__beansStop?: () => void;
 		/** A hash of the injected files and settings, so the same version isn't injected twice. */

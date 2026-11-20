@@ -71,3 +71,9 @@ view <user.beans_hint> bigger [<number_small>]: user.beans_grow(beans_hint, numb
 view <user.beans_hint> smaller [<number_small>]: user.beans_shrink(beans_hint, number_small or 1)
 view <user.beans_hint> size <number>: user.beans_resize_to(beans_hint, number)
 view <user.beans_hint> max: user.beans_resize_max(beans_hint)
+
+# Switches to the editor tab with these letters, in whichever split it is,
+# even when it's scrolled out of the tab strip. Tabs have letters of their
+# own, apart from the rows': a tab can be A while a row is A too. Same word
+# as Rango.
+slot <user.letters>: user.run_rpc_command("beans.slot", letters)

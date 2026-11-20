@@ -83,6 +83,12 @@
 					"scope": "application",
 					"default": false,
 					"description": "Give each row a letter of its own that it keeps while its sidebar shows the same view, such as Explorer or Source Control, instead of lettering the rows top to bottom. Scrolling or expanding a folder then leaves the other rows' letters alone, and a row that scrolls away has the same letter when it returns. New rows get two letters once the single letters are taken. Switching the sidebar to another view forgets its letters."
+				},
+				"beans.tabHints": {
+					"type": "boolean",
+					"scope": "application",
+					"default": true,
+					"description": "Put letters on the editor tabs, for switching to a tab with \"slot\" and its letters. A tab keeps its letters while it's open, even when it's scrolled out of the tab strip. Tab letters are apart from the sidebar's: a tab can be A while a row is A too."
 				}
 			}
 		}

@@ -1,6 +1,6 @@
 # Beans
 
-Beans puts letter hints on every row of the VS Code sidebars (Explorer, Search, Source Control, Outline, Run and Debug, Extensions…), and on the headers of the views in them, so you can drive them by voice with [Talon](https://talonvoice.com). Say "bean air" to open the row marked A, or to expand or collapse the view whose header has that hint. The Command Palette and other quick picks get number hints: "bean 3".
+Beans puts letter hints on every row of the VS Code sidebars (Explorer, Search, Source Control, Outline, Run and Debug, Extensions…), and on the headers of the views in them, so you can drive them by voice with [Talon](https://talonvoice.com). Say "bean air" to open the row marked A, or to expand or collapse the view whose header has that hint. The Command Palette and other quick picks get number hints: "bean 3". Editor tabs get letters of their own, which they keep while they're open: "slot cap" switches to the tab marked C, in whichever split it is, even when it's scrolled out of the tab strip.
 
 ![Hints on the Explorer rows](media/screenshot.png)
 
@@ -43,7 +43,7 @@ Extensions can't touch VS Code's interface, so Beans works around that. I want y
 
 Beans is tested on macOS with VS Code. Windows and Linux, and forks of VS Code such as VSCodium, should work but haven't been tried. Snap and Flatpak installs on Linux may not restart with **Relaunch with hints**. Forks that change VS Code's interface can rename the CSS classes Beans relies on (listed in `src/page/selectors.ts`), which hides hints in those views.
 
-Beans also works in the Eclipse Theia IDE desktop app, tested on macOS with Theia IDE 1.76. Theia only borrows VS Code's extension API: its sidebars are its own, so Beans has a second set of class names for them, in the same `src/page/selectors.ts`. Relaunch closes Theia's window, which quits it, and the relay file goes in Theia's configuration folder (`~/.theia-ide`). Most commands work as they do in VS Code. Moving files goes through VS Code's file API rather than the Explorer's cut and paste, so Theia can't undo it. Resizing, expanding more than one level and collapsing a file's folder don't work in Theia yet, and Beans says so when you ask. Theia in a browser can't work, since there's no debug pipe to reach. The integration test runs in Theia too, on every pull request against Theia IDE 1.76.1 and weekly against the newest release, so a Theia release that breaks hints is noticed.
+Beans also works in the Eclipse Theia IDE desktop app, tested on macOS with Theia IDE 1.76. Theia only borrows VS Code's extension API: its sidebars are its own, so Beans has a second set of class names for them, in the same `src/page/selectors.ts`. Relaunch closes Theia's window, which quits it, and the relay file goes in Theia's configuration folder (`~/.theia-ide`). Most commands work as they do in VS Code. Moving files goes through VS Code's file API rather than the Explorer's cut and paste, so Theia can't undo it. Resizing, expanding more than one level, collapsing a file's folder and tab hints don't work in Theia yet, and Beans says so when you ask. Theia in a browser can't work, since there's no debug pipe to reach. The integration test runs in Theia too, on every pull request against Theia IDE 1.76.1 and weekly against the newest release, so a Theia release that breaks hints is noticed.
 
 ## Commands
 
@@ -53,6 +53,7 @@ The Talon commands are in [`beans-talon/`](beans-talon), mirrored to the [beans-
 - **Right-click** (`beans.rowPoint`): "bean righty <letters>" right-clicks a sidebar row or view header, opening its context menu. On macOS, VS Code opens the menu at the real cursor, so a fake event can't place it: `beans.rowPoint` returns where the row is, as fractions of the window's width and height (title bar included, when VS Code uses the native one), and Talon moves the mouse there and right-clicks. The mouse stays on the row. The menu is native, so it has no hints: choose an item with the arrow keys, or type the start of its name, then press Enter.
 - **Toggle** (`beans.toggle`): "bean toggle" shows or hides the hints.
 - **Scroll** (`beans.scroll`, takes `"up"`, `"down"`, `"top"` or `"bottom"`, then a hint or `""`, then where: `""`, `"left"`, `"right"` or `"bar"`): the same words as Rango. "downer" and "upper" scroll the document in the focused editor split, even while the focus is in the sidebar or the terminal; "downer left" and "downer right" the left or right split, without moving the focus; "downer bar" (or "downer side", since "bar" can sound like "bat") the tallest sidebar list; "downer bill" the sidebar list holding that row. "upper all" and "downer all" go to the top and the bottom, followed by any of those. An open quick pick takes every scroll, "left" and "right" included. A scroll moves 80% of the view, in whole rows or lines, keeping at least one in sight; where rows differ in height, as in a notebook or Settings, it moves a plain 80%. The page sends wheel events, so it moves Settings too, and should move diff editors and notebooks, but not webview editors such as the Markdown preview or images. Floating editor windows aren't reached: Beans only runs in the main window, so "downer" there scrolls the main window's split. With `workbench.list.smoothScrolling` on, a list's scroll falls a little short. A document moves exactly, with these exceptions. From an `editor.mouseWheelScrollSensitivity` of 2.4 (on VS Code 1.90, 2.4 times the screen's pixel ratio), every wheel event moves at least 2 pixels, so a scroll can land a pixel off (two from 4.8); at 0.1 or less, it can stop a pixel short. Past 500,000px (about 27,800 lines of 18px), near an end that lies just past one of the points where Monaco renumbers its lines, every 500,000px, a scroll can stop up to a line from that end, since the two look the same from the page. With `editor.smoothScrolling` on, a scroll can now and then land a pixel off. `editor.inertialScroll` isn't supported. The left split is the one furthest left, the right split the one furthest right: with three side by side, the outer two. When two are stacked on that side, it's the one level with the focused split, else the top one.
+- **Slot** (`beans.slot`, takes a tab's letters): "slot <letters>" switches to the editor tab with those letters. See [Tab hints](#tab-hints).
 - **Inject** (`beans.inject`) runs the hint script again in every window. Beans also runs it when a command reaches a window that doesn't have the script, and asks you to say the command again.
 - **Relaunch** (`beans.relaunch`) quits VS Code and starts it again with the debug pipe, held by `cdp-relay.js`. The relay gives up after two minutes if the quit is canceled, and is replaced by the next Relaunch.
 
@@ -87,6 +88,26 @@ Anywhere you say a hint, you can say "this" for the selected rows instead: "bean
 
 "right bar" is the secondary sidebar, which is on the right unless you've moved the primary sidebar there. If you have, you can change the words in your copy of `beans.talon`.
 
+### Tab hints
+
+Every editor tab, in every split, gets letters in a pill before its name. Tab letters are apart from the sidebar's, so a tab can be A while a row is A too: "slot air" switches to the tab, "bean air" clicks the row. A tab keeps its letters for as long as it's open, whatever `beans.stableHints` says: closing or opening another tab doesn't change them, and a tab scrolled out of its tab strip still has them, so you can say them without scrolling to it. `beans.slot` activates the tab in the page, as a click would, so the strip scrolls to show it.
+
+The pill is as wide as its letters. Tabs sized to fit their name (`workbench.editor.tabSizing` `"fit"`, the default) show it between the file icon and the name, and grow by its width. Tabs that keep their width (`"shrink"` or `"fixed"`, and pinned tabs with `workbench.editor.pinnedTabSizing` `"shrink"`) show it in place of the file icon, so the name keeps its room; without a file icon theme there's no icon to replace, and the name shows a little less. A compact pinned tab (`workbench.editor.pinnedTabSizing` `"compact"`) shows its letters in place of its icon too. `bean toggle` hides tab hints with the rest.
+
+| Talon          | What it does                                                     |
+| -------------- | ---------------------------------------------------------------- |
+| slot <letters> | Switches to the tab with those letters, in whichever split it is |
+
+What doesn't work yet:
+
+- With `workbench.editor.showTabs` set to `"single"` or `"none"`, there are no tabs to hint.
+- Beans tells tabs apart by their split and their file's name, so two tabs with the same name in one split, such as two `index.ts` files or a file and its diff, can trade letters when one of them closes.
+- Renaming a file, or saving it under a new name, can change its tab's letters.
+- A tab dragged to another split gets new letters there.
+- Floating editor windows get no hints.
+- Reloading the window forgets the letters, and so does changing a Beans setting.
+- Theia's tabs get no hints.
+
 ### Target commands
 
 These take one object, `{ target }`, where a target is `{ items: [{ hint } | { from, to }] }`. In Talon, a target is hints and ranges joined with "and": "harp past ink and made" is H to I, plus M. Ranges include both ends. "this" is the selected rows (see above). Rows that aren't files, such as search matches, are skipped with a warning. The extension reads the rows' paths from the page through the debug pipe.
@@ -114,6 +135,7 @@ These take one object, `{ target }`, where a target is `{ items: [{ hint } | { f
 
 - **`beans.hintSpacing`**: `"default"` draws a pill with room for two letters and a little space around it; `"comfortable"` draws a wider pill with VS Code's own space after the icon, which is more; `"compact"` draws a narrower pill close to the icon and the name. A change shows at once in every window.
 - **`beans.stableHints`**: off by default, so Beans letters the rows top to bottom and a row's letter changes when you scroll or expand a folder above it. Turned on, each row gets a letter no other row has and keeps it, even after it scrolls away and comes back. Once the single letters are taken, new rows get two letters. Switching a sidebar to another view, such as from Explorer to Source Control, forgets that sidebar's letters, and so does closing it; reloading the window or changing a Beans setting forgets them all. Two rows that look the same, such as a file in both Staged Changes and Changes, can trade letters when they scroll away and come back.
+- **`beans.tabHints`**: on by default, so every editor tab gets letters for "slot". Turned off, the tabs have no hints.
 
 ## Development
 

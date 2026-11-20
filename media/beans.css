@@ -51,6 +51,97 @@ body:not(.beans-hidden) .pane-header[data-beans-hint] > .codicon:first-of-type {
 /* Theia's file icons and chevrons have their own spacing after them, so the
    pill only needs its gap after it. */
 
+/* An editor tab's letters, a pill before its name. It's as wide as its
+   letters, since tabs have no column to line up: a single letter makes a
+   round pill. A compact pinned tab (workbench.editor.pinnedTabSizing) is too
+   narrow for a pill beside its icon and has no name, so the pill takes the
+   icon's place. */
+.tab [data-beans-tab]::before {
+	content: attr(data-beans-tab);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-width: 1.5em;
+	height: 1.5em;
+	padding: 0 0.7em;
+	margin-right: 4px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: color-mix(in srgb, currentColor 15%, transparent);
+	font-size: 0.77em;
+	font-weight: 600;
+	font-style: normal;
+	letter-spacing: 0.04em;
+	line-height: 1;
+	/* The box holding the name lays out a row and stretches what's in it. */
+	align-self: center;
+	text-transform: uppercase;
+}
+/* The compact tab keeps its width, which VS Code counts on to place the
+   pinned tabs: the label, as wide as the icon, takes the whole tab, and its
+   name box, hidden there, shows the pill alone. As specific as VS Code's own
+   rules for compact tabs, and one class more. */
+body:not(.beans-hidden)
+	.monaco-workbench
+	.part.editor
+	.tabs-container
+	> .tab.sticky-compact[data-beans-tab]
+	> .tab-label {
+	flex: 1 1 auto;
+	width: 100%;
+	min-width: 0;
+	max-width: none;
+	justify-content: center;
+}
+body:not(.beans-hidden)
+	.monaco-workbench
+	.part.editor
+	.tabs-container
+	> .tab.sticky-compact[data-beans-tab]
+	> .tab-label::before {
+	display: none;
+}
+/* Tabs that keep their width (workbench.editor.tabSizing "shrink" or
+   "fixed", and pinned tabs with pinnedTabSizing "shrink", whatever the
+   tabSizing) narrow to fit many tabs, and the pill beside the icon would
+   leave no room for the name, so it takes the icon's place there too. The
+   file icon is the label's ::before. */
+body:not(.beans-hidden)
+	.monaco-workbench
+	.part.editor
+	.tabs-container
+	> .tab.sizing-shrink[data-beans-tab]
+	> .tab-label::before,
+body:not(.beans-hidden)
+	.monaco-workbench
+	.part.editor
+	.tabs-container
+	> .tab.sizing-fixed[data-beans-tab]
+	> .tab-label::before,
+body:not(.beans-hidden)
+	.monaco-workbench
+	.part.editor
+	.tabs-container
+	> .tab.sticky-shrink[data-beans-tab]
+	> .tab-label::before {
+	display: none;
+}
+body:not(.beans-hidden)
+	.monaco-workbench
+	.part.editor
+	.tabs-container
+	> .tab.sticky-compact[data-beans-tab]
+	> .tab-label
+	> .monaco-icon-label-container {
+	display: flex;
+}
+.tab.sticky-compact [data-beans-tab]::before {
+	padding: 0 0.3em;
+	margin-right: 0;
+}
+
+body.beans-hidden .tab [data-beans-tab]::before,
 body.beans-hidden .monaco-list-row [data-beans-hint]::before,
 body.beans-hidden .pane-header [data-beans-hint]::before,
 body.beans-hidden .theia-TreeNode [data-beans-hint]::before,

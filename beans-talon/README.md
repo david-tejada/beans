@@ -1,6 +1,6 @@
 # beans-talon
 
-These are the [Talon](https://talonvoice.com) voice commands for [Beans](https://github.com/david-tejada/beans), my VS Code extension that puts letter hints on sidebar rows (and numbers on Command Palette rows) so I can drive VS Code by voice. The extension draws the hints; this repo gives you the words to use them.
+These are the [Talon](https://talonvoice.com) voice commands for [Beans](https://github.com/david-tejada/beans), my VS Code extension that puts letter hints on sidebar rows and editor tabs (and numbers on Command Palette rows) so I can drive VS Code by voice. The extension draws the hints; this repo gives you the words to use them.
 
 This repo is a mirror of the [`beans-talon/` folder of the Beans repo](https://github.com/david-tejada/beans/tree/main/beans-talon), updated on every merge there. Issues and pull requests go to [Beans](https://github.com/david-tejada/beans).
 
@@ -107,6 +107,14 @@ These drag VS Code's dividers. A step is 60px for a width and 44px (two rows) fo
 | `view <hint> bigger [<number>]` / `view <hint> smaller [<number>]` | Resize a sidebar view by steps |
 | `view <hint> size <number>` | Set a sidebar view's height |
 | `view <hint> max` | Make a sidebar view as tall as it can be |
+
+### Tabs
+
+Every editor tab has letters too, apart from the rows': a tab can be A while a row is A. A tab keeps its letters while it's open, so you can say them even when the tab is scrolled out of the tab strip.
+
+| Say | What it does |
+| --- | --- |
+| `slot <letters>` | Switch to the tab with those letters, in whichever split it is |
 
 ## License
 

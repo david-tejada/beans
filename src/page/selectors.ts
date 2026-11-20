@@ -97,6 +97,21 @@ const VSCODE = {
 	editorPart: ".part.editor",
 	// The status bar, watched for requests.
 	statusBar: ".part.statusbar",
+	// A split's tab strip, which holds a tab for every editor open in it,
+	// scrolled into view or not. The terminal's tab list is a .tabs-container
+	// too, hence the split.
+	tabsContainer: ".editor-group-container .tabs-container",
+	tab: ".editor-group-container .tabs-container > .tab",
+	// A tab's label: its icon, then its name and description. A compact
+	// pinned tab (workbench.editor.pinnedTabSizing) has an empty name.
+	tabLabel: ".tab-label",
+	// Inside the label, the box holding the name, where the hint goes:
+	// the label's own ::before is the file icon.
+	tabHintPlace: ".tab-label > .monaco-icon-label-container",
+	// The name of what a tab shows: a file's name, "Untitled-1", or a
+	// webview's id. It stays put while a preview tab is kept open and while
+	// an untitled file's first line, its title, is typed.
+	tabNameAttribute: "data-resource-name",
 };
 
 // Eclipse Theia's own classes and ids. Theia builds its sidebars from its
@@ -185,6 +200,12 @@ const THEIA: typeof VSCODE = {
 	activeEditorGroup: "#theia-main-content-panel > .lm-TabBar.theia-tabBar-active",
 	editorPart: "#theia-main-content-panel",
 	statusBar: "#theia-statusBar",
+	// Tab hints don't support Theia yet: its tabs are its own.
+	tabsContainer: NONE,
+	tab: NONE,
+	tabLabel: NONE,
+	tabHintPlace: NONE,
+	tabNameAttribute: "",
 };
 
 export const SELECTORS = EDITOR === "theia" ? THEIA : VSCODE;
@@ -197,6 +218,13 @@ export const VIEW_NAMES = ["explorer", "openEditors", "scm", "search"] as const 
 
 /** The attribute a hinted row and its name element carry; beans.css draws it. */
 export const HINT_ATTR = "data-beans-hint";
+
+/**
+ * The attribute a hinted editor tab and its label carry; beans.css draws it.
+ * Tabs have their own letters, apart from the rows', so nothing that looks
+ * rows up by HINT_ATTR finds a tab.
+ */
+export const TAB_HINT_ATTR = "data-beans-tab";
 
 /** On body while the hints are toggled off. */
 export const HIDDEN_CLASS = "beans-hidden";

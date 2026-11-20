@@ -74,6 +74,8 @@ export interface PageApi {
 	select(items: { hint: string; path: string }[], alsoSelected?: string[]): Promise<string[]>;
 	resize(request: ResizeRequest): Promise<ResizeResult>;
 	rowPoint(hint: string): WindowPoint | null;
+	/** Switches to the editor tab with this hint. Returns whether there was one. */
+	slot(hint: string): boolean;
 }
 
 export type HintSpacing = "compact" | "default" | "comfortable";
@@ -82,4 +84,5 @@ export type HintSpacing = "compact" | "default" | "comfortable";
 export interface PageSettings {
 	hintSpacing: HintSpacing;
 	stableHints: boolean;
+	tabHints: boolean;
 }
