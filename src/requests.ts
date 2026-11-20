@@ -6,6 +6,12 @@ export { isRecord };
 // Talon's requests arrive through command-server as plain JSON, so each is
 // checked here, once, and the rest of the extension trusts the types.
 
+/**
+ * What beans.py sends in place of a hint when "this" is said: the selected
+ * rows. Real hints are two letters at most, so it can't be one of them.
+ */
+export const SELECTION_HINT = "this";
+
 /** A hint's letters or digits from whatever Talon sent, lower case; "" when there are none. */
 export function hintFrom(value: unknown): string {
 	const text = typeof value === "string" ? value : typeof value === "number" ? String(value) : "";
@@ -17,6 +23,43 @@ export type ScrollDirection = (typeof SCROLL_DIRECTIONS)[number];
 
 export function scrollDirectionFrom(value: unknown): ScrollDirection | null {
 	return SCROLL_DIRECTIONS.find((direction) => direction === value) ?? null;
+}
+
+/**
+ * What a scroll moves when it names no hint: the "document" in the focused
+ * split, the "left" or "right" split, or the sidebar ("bar").
+ */
+export type ScrollPlace = "document" | "left" | "right" | "bar";
+
+/** Where to scroll, from Talon's word for it; nothing means the document. Null for a word Beans doesn't know. */
+export function scrollPlaceFrom(value: unknown): ScrollPlace | null {
+	if (value === undefined || value === null || value === "" || value === "document") return "document";
+	if (value === "left" || value === "right" || value === "bar") return value;
+	return null;
+}
+
+/** A scroll as it travels from the extension host to the page. */
+export interface ScrollRequest {
+	direction: ScrollDirection;
+	/** A sidebar row's letters, or "". */
+	hint: string;
+	place: ScrollPlace;
+}
+
+/**
+ * A scroll request as the status bar channel carries it, "down-ab-bar".
+ * The hint keeps only its letters: quick pick numbers aren't sidebar rows.
+ */
+export function scrollChannelText({ direction, hint, place }: ScrollRequest): string {
+	return `${direction}-${hintFrom(hint).replace(/[0-9]/g, "")}-${place}`;
+}
+
+/** The scroll request in the channel's text, or null when it isn't one. */
+export function scrollRequestFrom(text: string): ScrollRequest | null {
+	const [direction, hint = "", place] = text.split("-");
+	const to = scrollDirectionFrom(direction);
+	const where = scrollPlaceFrom(place);
+	return to && where ? { direction: to, hint, place: where } : null;
 }
 
 /** The target in a command's arguments, or null when there isn't a usable one. */

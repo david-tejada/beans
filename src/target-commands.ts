@@ -6,7 +6,7 @@ import { globToRegExp } from "./globs";
 import { callPage } from "./inject";
 import { isWithin, toUriPath, withHome } from "./paths";
 import { reportError } from "./relaunch";
-import { isRecord, targetFrom } from "./requests";
+import { isRecord, SELECTION_HINT, targetFrom } from "./requests";
 import type { Editor, ResolvedItem, Target } from "./shared/types";
 import type { API as GitApi, GitExtension, Repository } from "./types/git";
 
@@ -46,8 +46,8 @@ export function registerTargetCommands(context: vscode.ExtensionContext): void {
 	const commands: Record<string, (args: unknown) => Promise<void>> = {
 		"beans.open": (args) => withItems(args, openItems),
 		"beans.split": (args) => withItems(args, (items) => openItems(items, { viewColumn: vscode.ViewColumn.Beside })),
-		"beans.delete": (args) => withItems(args, deleteItems),
-		"beans.move": (args) => withItems(args, (items) => moveItems(items, destinationFrom(args))),
+		"beans.delete": (args) => withItems(args, deleteItems, "all"),
+		"beans.move": (args) => withItems(args, (items) => moveItems(items, destinationFrom(args)), "all"),
 		"beans.copyPath": (args) => withItems(args, (items) => copyPaths(items, (uri) => uri.fsPath)),
 		"beans.copyRelativePath": (args) =>
 			withItems(args, (items) => copyPaths(items, (uri) => vscode.workspace.asRelativePath(uri, false))),
@@ -60,9 +60,9 @@ export function registerTargetCommands(context: vscode.ExtensionContext): void {
 			await withItems(args, selectItems);
 		},
 		"beans.revealInFinder": (args) => withItems(args, revealInFinder),
-		"beans.stage": (args) => withItems(args, (items) => runGit(items, (repo, paths) => repo.add(paths))),
-		"beans.unstage": (args) => withItems(args, (items) => runGit(items, (repo, paths) => repo.revert(paths))),
-		"beans.discard": (args) => withItems(args, discardItems),
+		"beans.stage": (args) => withItems(args, (items) => runGit(items, (repo, paths) => repo.add(paths)), "all"),
+		"beans.unstage": (args) => withItems(args, (items) => runGit(items, (repo, paths) => repo.revert(paths)), "all"),
+		"beans.discard": (args) => withItems(args, discardItems, "all"),
 		"beans.diff": (args) => withItems(args, diffItems),
 		"beans.rename": (args) => withItem(args, (item) => revealThen(item.uri, EXPLORER_COMMANDS[currentEditor()].rename)),
 		"beans.newFile": (args) =>
@@ -94,15 +94,28 @@ function levelsFrom(args: unknown): number {
 	return typeof levels === "number" && levels >= 1 ? Math.floor(levels) : 1;
 }
 
+/**
+ * How a command uses the selected rows "this" (SELECTION_HINT) names, which
+ * decides what happens when the selection may go on past the screen. "all":
+ * it changes files or Git state, so it stops rather than act on part of the
+ * selection. "shown": it acts on the rows that show, with a warning.
+ * "first": it takes one row, the first selected one, so nothing is lost.
+ */
+type SelectionUse = "all" | "shown" | "first";
+
 /** Resolves args.target in the focused window, and runs action on the file items, if any. */
-async function withItems(args: unknown, action: (items: Item[]) => Promise<unknown>): Promise<void> {
-	const items = await resolveTarget(targetFrom(argument(args, "target")));
+async function withItems(
+	args: unknown,
+	action: (items: Item[]) => Promise<unknown>,
+	use: SelectionUse = "shown",
+): Promise<void> {
+	const items = await resolveTarget(targetFrom(argument(args, "target")), use);
 	if (items?.length) await action(items);
 }
 
 /** Like withItems, for commands that act on a single item: the first one. */
 async function withItem(args: unknown, action: (item: Item) => Promise<unknown>): Promise<void> {
-	const items = await resolveTarget(targetFrom(argument(args, "target")));
+	const items = await resolveTarget(targetFrom(argument(args, "target")), "first");
 	const [first] = items ?? [];
 	if (!first) return;
 	if (items!.length > 1) vscode.window.showInformationMessage(`Beans: only ${first.hint.toUpperCase()} is used here.`);
@@ -112,15 +125,22 @@ async function withItem(args: unknown, action: (item: Item) => Promise<unknown>)
 /**
  * Asks the page which rows the target names, and returns them as items with
  * URIs. Warns about hints that aren't on screen or aren't files. Returns null
- * when there's no target or the page can't be reached.
+ * when there's no target, the page can't be reached, or the command uses
+ * all of a selection that may go on past the screen.
  */
-async function resolveTarget(target: Target | null): Promise<Item[] | null> {
+async function resolveTarget(target: Target | null, use: SelectionUse): Promise<Item[] | null> {
 	if (!target) return null;
 	let result;
 	try {
 		result = await callPage("resolve", target);
 	} catch (error) {
 		await reportError(error);
+		return null;
+	}
+	if (result.selectionRunsPast && use === "all") {
+		vscode.window.showWarningMessage(
+			"Beans did nothing, because the selection may go on past the screen and only the part on screen would be used. Scroll until a row past each end of the selection shows, or say the rows' hints.",
+		);
 		return null;
 	}
 	const items: Item[] = [];
@@ -130,12 +150,26 @@ async function resolveTarget(target: Target | null): Promise<Item[] | null> {
 		if (uri) items.push({ ...item, uri });
 		else unplaced.push(item.hint);
 	}
-	const problems = [];
-	if (result.missing.length) problems.push(`no row with hint ${hintList(result.missing)}`);
+	const problems = missingProblems(result.missing, result.selectionRunsPast && use === "shown");
 	if (result.skipped.length) problems.push(`skipped ${hintList(result.skipped)}, not files`);
 	if (unplaced.length) problems.push(`skipped ${hintList(unplaced)}, outside the workspace folders`);
 	warnAbout(problems);
 	return items;
+}
+
+/**
+ * What to say about the hints the page didn't find, "this" (SELECTION_HINT)
+ * among them, and whether only part of the selection was used (partial).
+ */
+function missingProblems(missing: string[], partial: boolean): string[] {
+	const hints = missing.filter((hint) => hint !== SELECTION_HINT);
+	const problems = [];
+	if (hints.length) problems.push(`no row with hint ${hintList(hints)}`);
+	// VS Code's lists don't render a selected row that's scrolled away, so
+	// this can't say whether anything is selected.
+	if (missing.includes(SELECTION_HINT)) problems.push("no selected row is on screen");
+	if (partial) problems.push("only the selected rows on screen were used, as the selection may go on past them");
+	return problems;
 }
 
 function warnAbout(problems: string[]): void {
@@ -268,7 +302,7 @@ async function destinationFolder(
 ): Promise<vscode.Uri | null> {
 	if (destination === null) return null;
 	if (destination === "root") return vscode.workspace.getWorkspaceFolder(firstUri)?.uri ?? null;
-	const [target] = (await resolveTarget(destination)) ?? [];
+	const [target] = (await resolveTarget(destination, "first")) ?? [];
 	if (!target) return null;
 	return target.isFolder ? target.uri : parentOf(target.uri);
 }
@@ -304,7 +338,7 @@ async function setExpanded(target: Target | null, expanded: boolean): Promise<vs
 		await reportError(error);
 		return null;
 	}
-	if (result.missing.length) warnAbout([`no row with hint ${hintList(result.missing)}`]);
+	warnAbout(missingProblems(result.missing, result.selectionRunsPast));
 	return result.folders.map((folder) => uriFor(folder.path)).filter((uri): uri is vscode.Uri => uri !== null);
 }
 

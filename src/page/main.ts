@@ -2,7 +2,7 @@
 // script. The page enforces Trusted Types, so nothing here assigns HTML
 // strings (no innerHTML); it only sets attributes and classes.
 import type { WindowPoint } from "../shared/types";
-import { scrollDirectionFrom } from "../requests";
+import { scrollRequestFrom } from "../requests";
 import { clickRow, labelPoint } from "./click";
 import { letterHint, numberHint, stableLetterHints } from "./hints";
 import { resize } from "./resize";
@@ -163,9 +163,8 @@ function runRequest(command: string, arg: string): void {
 	if (command === "pick") pick(arg);
 	if (command === "toggle") document.body.classList.toggle(HIDDEN_CLASS);
 	if (command === "scroll") {
-		const [direction, hint = ""] = arg.split("-");
-		const where = scrollDirectionFrom(direction);
-		if (where) scroll(where, hint);
+		const request = scrollRequestFrom(arg);
+		if (request) scroll(request);
 	}
 }
 

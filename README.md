@@ -4,7 +4,7 @@ Beans puts letter hints on every row of the VS Code sidebars (Explorer, Search, 
 
 ![Hints on the Explorer rows](media/screenshot.png)
 
-Beyond clicking, you can right-click a row, scroll a list, resize the sidebars and the panel, and act on files and folders by hint: "bean open bat and cap", "bean move harp past ink to drum", "bean stage air".
+Beyond clicking, you can right-click a row, scroll a document or a list, resize the sidebars and the panel, and act on files and folders by hint: "bean open bat and cap", "bean move harp past ink to drum", "bean stage air". Wherever a hint goes, "this" stands for the selected rows, so you don't have to find a letter: "bean split this", "downer this".
 
 I use Beans every day on macOS; Windows and Linux should work but I haven't tried them.
 
@@ -52,10 +52,26 @@ The Talon commands are in [`beans-talon/`](beans-talon), mirrored to the [beans-
 - **Pick** (`beans.pick`): "bean <letters>" clicks a sidebar row, "bean <number>" a Command Palette row.
 - **Right-click** (`beans.rowPoint`): "bean righty <letters>" right-clicks a sidebar row or view header, opening its context menu. On macOS, VS Code opens the menu at the real cursor, so a fake event can't place it: `beans.rowPoint` returns where the row is, as fractions of the window's width and height (title bar included, when VS Code uses the native one), and Talon moves the mouse there and right-clicks. The mouse stays on the row. The menu is native, so it has no hints: choose an item with the arrow keys, or type the start of its name, then press Enter.
 - **Toggle** (`beans.toggle`): "bean toggle" shows or hides the hints.
-- **Scroll** (`beans.scroll`, takes `"up"`, `"down"`, `"top"` or `"bottom"`, and optionally a hint): "downer", "upper bill", "upper all" (top), "downer all" (bottom), the same words as Rango. It scrolls the open quick pick, else the tallest sidebar list, or the list holding that row.
+- **Scroll** (`beans.scroll`, takes `"up"`, `"down"`, `"top"` or `"bottom"`, then a hint or `""`, then where: `""`, `"left"`, `"right"` or `"bar"`): the same words as Rango. "downer" and "upper" scroll the document in the focused editor split, even while the focus is in the sidebar or the terminal; "downer left" and "downer right" the left or right split, without moving the focus; "downer bar" (or "downer side", since "bar" can sound like "bat") the tallest sidebar list; "downer bill" the sidebar list holding that row. "upper all" and "downer all" go to the top and the bottom, followed by any of those. An open quick pick takes every scroll, "left" and "right" included. A scroll moves 80% of the view, in whole rows or lines, keeping at least one in sight; where rows differ in height, as in a notebook or Settings, it moves a plain 80%. The page sends wheel events, so it moves Settings too, and should move diff editors and notebooks, but not webview editors such as the Markdown preview or images. Floating editor windows aren't reached: Beans only runs in the main window, so "downer" there scrolls the main window's split. With `workbench.list.smoothScrolling` on, a list's scroll falls a little short. A document moves exactly, with these exceptions. From an `editor.mouseWheelScrollSensitivity` of 2.4 (on VS Code 1.90, 2.4 times the screen's pixel ratio), every wheel event moves at least 2 pixels, so a scroll can land a pixel off (two from 4.8); at 0.1 or less, it can stop a pixel short. Past 500,000px (about 27,800 lines of 18px), near an end that lies just past one of the points where Monaco renumbers its lines, every 500,000px, a scroll can stop up to a line from that end, since the two look the same from the page. With `editor.smoothScrolling` on, a scroll can now and then land a pixel off. `editor.inertialScroll` isn't supported. The left split is the one furthest left, the right split the one furthest right: with three side by side, the outer two. When two are stacked on that side, it's the one level with the focused split, else the top one.
 - **Slot** (`beans.slot`, takes a tab's letters): "slot <letters>" switches to the editor tab with those letters. See [Tab hints](#tab-hints).
 - **Inject** (`beans.inject`) runs the hint script again in every window. Beans also runs it when a command reaches a window that doesn't have the script, and asks you to say the command again.
 - **Relaunch** (`beans.relaunch`) quits VS Code and starts it again with the debug pipe, held by `cdp-relay.js`. The relay gives up after two minutes if the quit is canceled, and is replaced by the next Relaunch.
+
+### "this"
+
+Anywhere you say a hint, you can say "this" for the selected rows instead: "bean expand this", "bean move this to drum", "bean righty this", "view this bigger", "downer this". beans-talon sends the hint `"this"`, which no real hint can be.
+
+- **Which selection.** The sidebar list that has the keyboard focus. When the focus is elsewhere, such as in the editor, the Explorer's selection; else the first sidebar list that has one. When the list has no selected row on screen, Beans says so (a target, right-click and resize do; "bean this" and "downer this" stay silent, as they do for a hint that isn't on screen).
+- **Every row or the first.** In a target, "this" is every selected row. Where a command takes one row (pick, right-click, scroll, resize, rename, new file, new folder, find in, a move's destination), and as the end of a range ("this past drum"), it's the first selected row. "bean this" clicks it, which leaves only that row selected.
+- **Only the rows on screen.** The sidebar lists only draw the rows on screen, so Beans can't see selected rows that are scrolled away. When it can tell the selection may go on past the screen, what happens depends on the command:
+
+  | Commands                                                                                       | When the selection may go on past the screen                                                            |
+  | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+  | delete, move (what's moved), discard, stage, unstage                                           | Beans does nothing and says why: these change files or Git, and would change only part of the selection |
+  | open, split, copy path, copy local, expand, collapse, parent, select, reveal, diff             | Beans uses the selected rows on screen, and says that's all it used                                     |
+  | rename, new file, new folder, find in, a move's destination, and everything that takes one row | Beans uses the first selected row, as always                                                            |
+
+  Beans can tell when a selected row sits at the top or bottom edge of the list with more rows beyond it, so a selection that ends exactly on the edge row counts too: scroll until a row past each end of the selection shows. It can also tell when a selected row is drawn just past the edge, as Theia does, and, in VS Code, when only one of several selected rows shows. The same goes for "this" as a range's end ("bean delete this past drum"). It can't tell when rows selected one by one, far apart, are scrolled away while others show; then "this" is the ones that show.
 
 ### Resize commands
 
@@ -94,7 +110,7 @@ What doesn't work yet:
 
 ### Target commands
 
-These take one object, `{ target }`, where a target is `{ items: [{ hint } | { from, to }] }`. In Talon, a target is hints and ranges joined with "and": "harp past ink and made" is H to I, plus M. Ranges include both ends. Rows that aren't files, such as search matches, are skipped with a warning. The extension reads the rows' paths from the page through the debug pipe.
+These take one object, `{ target }`, where a target is `{ items: [{ hint } | { from, to }] }`. In Talon, a target is hints and ranges joined with "and": "harp past ink and made" is H to I, plus M. Ranges include both ends. "this" is the selected rows (see above). Rows that aren't files, such as search matches, are skipped with a warning. The extension reads the rows' paths from the page through the debug pipe.
 
 | Talon                                | Command                                            | What it does                                                                                                                                                                                                                                                                                                            |
 | ------------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

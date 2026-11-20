@@ -5,11 +5,18 @@ mod = Module()
 # Resize targets that are parts of the window; anything else is a hint.
 PARTS = {"sidebar", "secondary", "panel"}
 
+mod.list("beans_scroll_place", desc="Where upper and downer scroll: an editor split or the sidebar")
 
-@mod.capture(rule="<user.letters>")
+# Sent in place of a hint for "this": the selected rows. Beans knows it as
+# SELECTION_HINT. Hints are two letters at most, so it's never one.
+SELECTION_HINT = "this"
+
+
+@mod.capture(rule="this | <user.letters>")
 def beans_hint(m) -> str:
-    """The letters of one sidebar hint, like "any bill" for AB."""
-    return str(m.letters)
+    """The letters of one sidebar hint, like "any bill" for AB, or "this" for the selected rows."""
+    letters = getattr(m, "letters", None)
+    return SELECTION_HINT if letters is None else str(letters)
 
 
 @mod.capture(rule="<user.beans_hint> [past <user.beans_hint>]")

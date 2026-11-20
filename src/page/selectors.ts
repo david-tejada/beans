@@ -59,6 +59,12 @@ const VSCODE = {
 	pathAttribute: "aria-label",
 	// A row the user selected, leaving out sticky scroll copies of rows.
 	selectedRow: ".monaco-list-row.selected:not(.monaco-tree-sticky-row)",
+	// A list holding one selected row, or more than one, wherever they are.
+	singleSelection: ".selection-single",
+	multipleSelection: ".selection-multiple",
+	// A list row that is, or isn't, the list's last item.
+	lastRow: '[data-last-element="true"]',
+	notLastRow: '[data-last-element="false"]',
 	// A list that scrolls natively, with scrollTop; VS Code's lists don't.
 	nativeScroller: NONE,
 	// The parts that resize commands can target, by the name they're called with.
@@ -76,10 +82,21 @@ const VSCODE = {
 	splitViewView: ".split-view-view",
 	// Editors draw their own sashes (the find widget's, for one).
 	editor: ".monaco-editor",
+	// Monaco's lines, which it moves by style.top as it scrolls, and one line.
+	editorLines: ".lines-content",
+	editorLine: ".view-line",
+	// The attribute of an editor that names the file it shows, which
+	// changes when its split switches tabs.
+	editorFileAttribute: "data-uri",
+	// An editor split (VS Code's editor group), and the one with the focus,
+	// or the one that had it last while the focus is in a sidebar.
+	editorGroup: ".editor-group-container",
+	activeEditorGroup: ".editor-group-container.active",
+	// The editor area holding the splits: the main one, or the modal one
+	// VS Code opens Settings in.
+	editorPart: ".part.editor",
 	// The status bar, watched for requests.
 	statusBar: ".part.statusbar",
-	// A split of the editor area, holding its own tabs and editors.
-	editorGroup: ".editor-group-container",
 	// A split's tab strip, which holds a tab for every editor open in it,
 	// scrolled into view or not. The terminal's tab list is a .tabs-container
 	// too, hence the split.
@@ -155,6 +172,12 @@ const THEIA: typeof VSCODE = {
 	pathLabel: ".theia-FileStatNode[title], .result-head-info[title], .scmItem[title]",
 	pathAttribute: "title",
 	selectedRow: ".theia-TreeNode.theia-mod-selected",
+	// Theia doesn't say how many rows are selected.
+	singleSelection: NONE,
+	multipleSelection: NONE,
+	// Theia's rows don't say which is last; its scroller does.
+	lastRow: NONE,
+	notLastRow: NONE,
 	// The scrolling element of a tree, from the react-virtuoso list Theia
 	// uses. In Source Control's graph, it's the list itself.
 	nativeScroller: "[data-virtuoso-scroller]",
@@ -167,9 +190,17 @@ const THEIA: typeof VSCODE = {
 	pane: ".theia-view-container-part",
 	splitViewView: NONE,
 	editor: ".monaco-editor",
+	editorLines: ".lines-content",
+	editorLine: ".view-line",
+	editorFileAttribute: "data-uri",
+	// The editor shown in each split of the main area; the others are hidden.
+	editorGroup: "#theia-main-content-panel > .lm-DockPanel-widget:not(.lm-mod-hidden)",
+	// Theia marks the tab bar of the split with the focus, or that had it
+	// last; the split sits right below it.
+	activeEditorGroup: "#theia-main-content-panel > .lm-TabBar.theia-tabBar-active",
+	editorPart: "#theia-main-content-panel",
 	statusBar: "#theia-statusBar",
 	// Tab hints don't support Theia yet: its tabs are its own.
-	editorGroup: NONE,
 	tabsContainer: NONE,
 	tab: NONE,
 	tabLabel: NONE,

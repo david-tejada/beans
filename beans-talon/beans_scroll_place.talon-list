@@ -1,0 +1,9 @@
+list: user.beans_scroll_place
+-
+# The left and right editor splits.
+left: left
+right: right
+# The sidebar. "side" is there because "downer bar" can sound like
+# "downer bat" to people whose word for B is "bat".
+bar: bar
+side: bar

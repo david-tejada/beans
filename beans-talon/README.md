@@ -30,6 +30,8 @@ The commands that act on rows start with `bean`, so they don't clash with other 
 
 A **hint** is the letters on a row, spoken with your community alphabet words. A **target** is one or more hints and ranges joined with "and", where a range is `<hint> past <hint>` and includes both ends. For example: `bean open harp past ink and made`.
 
+Wherever a hint goes, you can say `this` for the selected rows, so you don't have to look for the letters: `bean split this`, `downer this`, `view this bigger`, `bean move this to drum`. In a target, `this` is every selected row; where one row is needed, and as the end of a range, it's the first one. The selection is the one in the sidebar list you're in, or the Explorer's while you're in the editor. Only the rows on screen count. When Beans can tell the selection may go on past the screen, `bean delete`, `bean move`, `bean discard`, `bean stage` and `bean unstage` do nothing and say why, and the other commands use the selected rows on screen and say so. Scroll until a row past each end of the selection shows, or say the rows' hints.
+
 ### Hints
 
 | Say | What it does |
@@ -41,14 +43,23 @@ A **hint** is the letters on a row, spoken with your community alphabet words. A
 
 ### Scrolling
 
-These scroll the open Command Palette, or else the tallest sidebar list. With a hint, they scroll the sidebar list holding that row.
+On their own, these scroll the document in the editor split you're in, even while the focus is in the sidebar or the terminal. While the Command Palette is open, every one of them scrolls it instead. A scroll moves 80% of the view, so a fifth of it, and at least one line, stays in sight.
 
 | Say | What it does |
 | --- | --- |
-| `upper [<hint>]` | Scroll up |
-| `downer [<hint>]` | Scroll down |
-| `upper all [<hint>]` | Scroll to the top |
-| `downer all [<hint>]` | Scroll to the bottom |
+| `upper` / `downer` | Scroll the document up or down |
+| `upper left` / `downer left` | Scroll the left editor split, without moving the focus |
+| `upper right` / `downer right` | Scroll the right editor split, without moving the focus |
+| `upper bar` / `downer bar` | Scroll the tallest sidebar list |
+| `upper side` / `downer side` | The same as `bar` |
+| `upper <hint>` / `downer <hint>` | Scroll the sidebar list holding that row |
+| `upper all …` / `downer all …` | Scroll to the top or the bottom, followed by nothing, `left`, `right`, `bar`, `side` or a hint |
+
+The left split is the one furthest to the left, and the right split the one furthest to the right, wherever the focus is: with three splits side by side, they're the outer two. When two are stacked on that side, it's the one level with the split you're in, else the top one. With one split, both words scroll it.
+
+`side` is there because `downer bar` can sound like `downer bat` to Talon, for people whose word for B is "bat". To change these words, edit `beans_scroll_place.talon-list`.
+
+Webview editors, such as the Markdown preview and images, can't be scrolled. Neither can floating editor windows: Beans only runs in VS Code's main window, so `downer` there scrolls the main window's split. With VS Code's `workbench.list.smoothScrolling` on, a list's scroll falls a little short. From an `editor.mouseWheelScrollSensitivity` of 2.4 (on VS Code 1.90, 2.4 times the screen's pixel ratio), a document's scroll can land a pixel off (two from 4.8), and at 0.1 or less, a pixel short. Past 500,000px (about 27,800 lines of 18px), near the end of the file, a scroll can now and then stop up to a line from it. With `editor.smoothScrolling` on, a scroll can now and then land a pixel off. `editor.inertialScroll` isn't supported.
 
 ### Targets
 

@@ -3,11 +3,19 @@ import path from "node:path";
 import * as vscode from "vscode";
 import { currentEditor, editorOf, setEditor } from "./editor";
 import { callPage, injectAll, type PageFiles } from "./inject";
-import { createOutput } from "./output";
+import { createOutput, log } from "./output";
 import { userDataDir } from "./paths";
 import { relaunch, reportError, setDevelopment } from "./relaunch";
 import { setUserDataDir } from "./relay-connection";
-import { hintFrom, isRecord, resizeRequestFrom, scrollDirectionFrom } from "./requests";
+import {
+	hintFrom,
+	isRecord,
+	resizeRequestFrom,
+	scrollChannelText,
+	scrollDirectionFrom,
+	scrollPlaceFrom,
+	SELECTION_HINT,
+} from "./requests";
 import { toHintSpacing } from "./hint-spacing";
 import type { PageSettings, ResizeRequest } from "./shared/types";
 import { registerTargetCommands } from "./target-commands";
@@ -43,12 +51,9 @@ export function activate(context: vscode.ExtensionContext): void {
 		}),
 		vscode.commands.registerCommand("beans.rowPoint", rowPoint),
 		vscode.commands.registerCommand("beans.toggle", () => send(channel, "toggle")),
-		// direction: "up", "down", "top" or "bottom". letters: optional hint
-		// of a row in the list to scroll.
-		vscode.commands.registerCommand("beans.scroll", (direction: unknown, letters: unknown) => {
-			const where = scrollDirectionFrom(direction);
-			if (where) send(channel, "scroll", `${where}-${hintFrom(letters).replace(/[0-9]/g, "")}`);
-		}),
+		vscode.commands.registerCommand("beans.scroll", (direction: unknown, letters: unknown, where: unknown) =>
+			scroll(channel, direction, letters, where),
+		),
 		vscode.commands.registerCommand("beans.resize", async (request: unknown) => {
 			const parsed = resizeRequestFrom(request);
 			if (parsed) await resize(parsed);
@@ -119,6 +124,40 @@ function send(channel: vscode.StatusBarItem, command: "pick" | "toggle" | "scrol
 }
 
 /**
+ * Sends a scroll to the page. direction: "up", "down", "top" or "bottom".
+ * letters: optional hint of a row in the list to scroll. where, without a
+ * hint: "left" or "right" for that editor split, "bar" for the sidebar, or
+ * nothing for the focused document. It has its own argument, since "up" is
+ * a hint too.
+ */
+function scroll(channel: vscode.StatusBarItem, direction: unknown, letters: unknown, where: unknown): void {
+	const to = scrollDirectionFrom(direction);
+	const place = scrollPlaceFrom(where);
+	if (!place) {
+		// Only a beans-talon newer or older than the extension sends one.
+		warn(
+			`beans-talon asked to scroll "${String(where)}", which this version of Beans doesn't know. Update the Beans extension, and pull beans-talon (\`git pull\` in its folder), so they match`,
+		);
+		return;
+	}
+	if (!to) return;
+	const hint = hintFrom(letters);
+	// The page can't tell the host it found nothing, so the host says it.
+	if (place === "document" && !hint && !isEditorOpen()) {
+		log(
+			`scroll: no editor is open, so there's no document to scroll unless a quick pick is open; "upper bar" and "downer bar" scroll the sidebar`,
+		);
+	}
+	send(channel, "scroll", scrollChannelText({ direction: to, hint, place }));
+}
+
+/** Whether any editor tab is open; true when the editor can't say, as an older Theia might not. */
+function isEditorOpen(): boolean {
+	const groups = vscode.window.tabGroups as vscode.TabGroups | undefined;
+	return groups?.all.some((group) => group.tabs.length > 0) ?? true;
+}
+
+/**
  * Returns where to right-click the row with this hint, as { x, y } fractions
  * of the focused window's width and height, for Talon to click there. Warns
  * and returns null when there's no such row.
@@ -133,7 +172,7 @@ async function rowPoint(letters: unknown): Promise<{ x: number; y: number } | nu
 		await reportError(error);
 		return null;
 	}
-	if (!point) vscode.window.showWarningMessage(`Beans: no row with hint ${hint.toUpperCase()}.`);
+	if (!point) warn(hint === SELECTION_HINT ? "no selected row is on screen" : `no row with hint ${hint.toUpperCase()}`);
 	return point ?? null;
 }
 

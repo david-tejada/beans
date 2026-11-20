@@ -29,14 +29,17 @@ export interface ResolveResult {
 	items: ResolvedItem[];
 	/** Hints of rows that aren't files. */
 	skipped: string[];
-	/** Hints that aren't on screen. */
+	/** Hints that aren't on screen, and "this" when no selected row is. */
 	missing: string[];
+	/** Whether the selection "this" names may go on past the screen; its rows on screen are in the result. */
+	selectionRunsPast: boolean;
 }
 
 export interface SetExpandedResult {
 	/** The Explorer folders among the rows, for expanding deeper. */
 	folders: { hint: string; path: string }[];
 	missing: string[];
+	selectionRunsPast: boolean;
 }
 
 export type ResizePart = "sidebar" | "secondary" | "panel";

@@ -1,78 +1,247 @@
-import type { ScrollDirection } from "../requests";
+import type { ScrollPlace, ScrollRequest } from "../requests";
 import { nextFrame } from "./click";
+import { pageDistance } from "./page-distance";
+import { linesSettled, scrollLines, type LinesView, type Reading } from "./scroll-lines";
 import { openQuickInput, sidebarRowWithHint, sidebars } from "./rows";
 import { SELECTORS } from "./selectors";
+import { splitOnSide } from "./split-on-side";
 
 /**
- * Scrolls a list "up", "down" (about a screen), to the "top" or to the
- * "bottom". The list is the open quick pick's, else the one holding the
- * row with this hint (or under the view header with it), else the tallest
- * one in the sidebars.
+ * Scrolls "up", "down" (most of a screen), to the "top" or to the "bottom".
+ * An open quick pick takes every scroll. Otherwise it's the "left" or
+ * "right" editor split, else the sidebar list holding the row with this
+ * hint (or under the view header with it), else for "bar" the tallest
+ * sidebar list, and for "document" the editor split with the focus.
  */
-export function scroll(direction: ScrollDirection, hint: string): void {
-	const list = listToScroll(hint);
-	if (!list) {
-		console.log(`[beans] no list to scroll${hint ? ` for hint "${hint}"` : ""}`);
+export function scroll({ direction, hint, place }: ScrollRequest): void {
+	const view = viewToScroll(hint, place);
+	if (!view) {
+		console.log(`[beans] nothing to scroll${hint ? ` for hint "${hint}"` : ` in the ${place}`}`);
 		return;
 	}
-	const rowHeight = list.querySelector(SELECTORS.row)?.getBoundingClientRect().height ?? 22;
-	// Keep two rows of the old view on screen, so you don't lose your place.
-	const page = Math.max(list.getBoundingClientRect().height - 2 * rowHeight, rowHeight);
-	const distance = { up: -page, down: page, top: -1e6, bottom: 1e6 }[direction];
-	const scroller = list.matches(SELECTORS.nativeScroller)
-		? list
-		: list.querySelector<HTMLElement>(SELECTORS.nativeScroller);
+	const page = pageDistance(view.box.getBoundingClientRect().height, view.rowHeight);
+	const distance = { up: -page, down: page, top: -TO_THE_END, bottom: TO_THE_END }[direction];
+	const scroller = view.box.matches(SELECTORS.nativeScroller)
+		? view.box
+		: view.box.querySelector<HTMLElement>(SELECTORS.nativeScroller);
 	if (scroller) scroller.scrollBy({ top: distance });
-	else scrollBy(list.querySelector<HTMLElement>(SELECTORS.listRows) ?? list, distance);
+	else scrollBy(view.rows, distance, view.box.matches(SELECTORS.editor) ? view.rowHeight : 0);
 }
+
+// Past the end of almost anything. Chromium caps the event's delta, and
+// Monaco moves about 50 * wheelDeltaY / 120 for it, around 4e8px (less in
+// VS Code 1.90, which also divides by the screen's pixel ratio): 10 to 20
+// million lines.
+const TO_THE_END = 1e9;
 
 /**
- * Scrolls a list's rows by about this many pixels (positive is down).
- *
- * VS Code's lists draw their own scrollbar and only react to wheel
- * events. How far a wheel event moves them depends on the screen's pixel
- * ratio and VS Code's settings, and a synthetic event even reads with the
- * opposite sign, so this sends one event, measures how far the rows
- * moved, and sends a second one for the rest. Both go out before the
- * next paint when the list moves at once, so the rows don't jump twice;
- * with smooth scrolling on, the second waits a frame.
+ * Something to scroll: the box it shows in, the element that moves inside
+ * it (a list's rows, an editor's lines), and how tall one row or line is,
+ * or 0 when its rows differ in height.
  */
-export function scrollBy(rows: HTMLElement, distance: number): void {
-	const wheel = (deltaY: number) =>
-		rows.dispatchEvent(
-			new WheelEvent("wheel", { bubbles: true, cancelable: true, view: window, deltaY, deltaMode: 0 }),
-		);
-	const before = scrollPosition(rows);
-	const guess = -distance;
-	wheel(guess);
-	const finish = () => {
-		const moved = scrollPosition(rows) - before;
-		const remaining = distance - moved;
-		if (moved === 0 || Math.abs(remaining) < 1) return;
-		wheel(guess * (remaining / moved));
-	};
-	if (scrollPosition(rows) !== before) finish();
-	else void nextFrame().then(finish);
+interface ScrollView {
+	box: HTMLElement;
+	rows: HTMLElement;
+	rowHeight: number;
 }
 
-// The list moves its rows by setting style.top to minus the scroll position.
-export function scrollPosition(rows: HTMLElement): number {
-	return -parseFloat(rows.style.top || "0");
-}
-
-function listToScroll(hint: string): HTMLElement | null {
+function viewToScroll(hint: string, place: ScrollPlace): ScrollView | null {
 	const quickInput = openQuickInput();
-	if (quickInput) return quickInput.querySelector<HTMLElement>(SELECTORS.list);
+	if (quickInput) return listView(quickInput.querySelector<HTMLElement>(SELECTORS.list), true);
+	if (place === "left" || place === "right") return documentIn(splitToScroll(place));
 	if (hint) {
 		const row = sidebarRowWithHint(hint);
 		if (row?.matches(SELECTORS.paneHeader))
-			return row.parentElement?.querySelector<HTMLElement>(SELECTORS.list) ?? null;
-		return row?.closest<HTMLElement>(SELECTORS.list) ?? null;
+			return listView(row.parentElement?.querySelector<HTMLElement>(SELECTORS.list) ?? null, true);
+		return listView(row?.closest<HTMLElement>(SELECTORS.list) ?? null, true);
 	}
+	if (place === "bar") return listView(tallestSidebarList(), true);
+	return documentIn(splitToScroll("document"));
+}
+
+// Sidebar and quick pick rows are all one height; a notebook's cells and
+// Settings' rows aren't, so for those the first row says nothing.
+function listView(list: HTMLElement | null, rowsAlike: boolean): ScrollView | null {
+	if (!list) return null;
+	return {
+		box: list,
+		rows: list.querySelector<HTMLElement>(SELECTORS.listRows) ?? list,
+		rowHeight: rowsAlike ? list.querySelector(SELECTORS.row)?.getBoundingClientRect().height || 22 : 0,
+	};
+}
+
+function tallestSidebarList(): HTMLElement | null {
 	const lists = sidebars().flatMap((part) => Array.from(part.querySelectorAll<HTMLElement>(SELECTORS.list)));
 	const heights = lists.map((list) => list.getBoundingClientRect().height);
 	const tallest = Math.max(0, ...heights);
 	return tallest > 0 ? (lists[heights.indexOf(tallest)] ?? null) : null;
+}
+
+/**
+ * What a split shows: the biggest text editor or list in it. That's the
+ * text in a text editor, the modified side in a diff editor, the list of
+ * cells in a notebook, the settings in Settings. Webviews, such as the
+ * Markdown preview, have neither.
+ */
+function documentIn(split: HTMLElement | null): ScrollView | null {
+	if (!split) return null;
+	const views = [
+		...[...split.querySelectorAll<HTMLElement>(SELECTORS.editor)].map((editor) => editorView(editor)),
+		...[...split.querySelectorAll<HTMLElement>(SELECTORS.list)].map((list) => listView(list, false)),
+	];
+	let biggest: ScrollView | null = null;
+	let biggestArea = 0;
+	for (const view of views) {
+		if (!view) continue;
+		const { width, height } = view.box.getBoundingClientRect();
+		// A tie goes to the later one: a side-by-side diff's modified side.
+		if (width * height > 0 && width * height >= biggestArea) {
+			biggest = view;
+			biggestArea = width * height;
+		}
+	}
+	return biggest;
+}
+
+function editorView(editor: HTMLElement): ScrollView | null {
+	const lines = editor.querySelector<HTMLElement>(SELECTORS.editorLines);
+	if (!lines) return null;
+	return {
+		box: editor,
+		rows: lines,
+		rowHeight: editor.querySelector(SELECTORS.editorLine)?.getBoundingClientRect().height || 18,
+	};
+}
+
+/**
+ * The editor split with the focus, or that had it last, or the left or
+ * right split beside it.
+ */
+function splitToScroll(place: "document" | "left" | "right"): HTMLElement | null {
+	// VS Code opens Settings, among others, in a modal editor part over the
+	// main one, with an active split of its own. That part comes later in
+	// the page, and it's the one in sight.
+	const mark = shown(document.querySelectorAll<HTMLElement>(SELECTORS.activeEditorGroup)).at(-1) ?? null;
+	const part = mark?.closest(SELECTORS.editorPart) ?? document;
+	const splits = shown(part.querySelectorAll<HTMLElement>(SELECTORS.editorGroup));
+	const focused = mark && (splits.includes(mark) ? mark : splitBelow(mark, splits));
+	// Theia marks no tab bar until a split has had the focus, such as right
+	// after it starts with editors open.
+	if (place === "document") return focused ?? splits[0] ?? null;
+	const boxes = splits.map((split) => split.getBoundingClientRect());
+	return splits[splitOnSide(boxes, place, focused?.getBoundingClientRect() ?? null)] ?? null;
+}
+
+function shown(elements: NodeListOf<HTMLElement>): HTMLElement[] {
+	return [...elements].filter((element) => {
+		const { width, height } = element.getBoundingClientRect();
+		return width > 0 && height > 0;
+	});
+}
+
+// Theia marks the tab bar above the active split, not the split.
+function splitBelow(mark: HTMLElement, splits: HTMLElement[]): HTMLElement | null {
+	const markBox = mark.getBoundingClientRect();
+	const middle = markBox.left + markBox.width / 2;
+	let nearest: { split: HTMLElement; top: number } | null = null;
+	for (const split of splits) {
+		const box = split.getBoundingClientRect();
+		const isBelow = box.left <= middle && middle <= box.right && box.top >= markBox.top;
+		if (isBelow && (!nearest || box.top < nearest.top)) nearest = { split, top: box.top };
+	}
+	return nearest?.split ?? null;
+}
+
+/**
+ * Scrolls a list's rows by about this many pixels (positive is down), or,
+ * given their height, an editor's lines exactly (see scrollLines).
+ *
+ * VS Code's lists and editors draw their own scrollbar and only react to
+ * wheel events, which move them by an amount that depends on the screen
+ * and the settings, and a synthetic one even reads with the opposite sign,
+ * so this measures how far an event went and sends another for the rest.
+ */
+export function scrollBy(rows: HTMLElement, distance: number, lineHeight = 0): void {
+	if (lineHeight > 0) void inTurn(() => scrollEditor(rows, distance, lineHeight));
+	// To the top or the bottom, one event far past the end does it, and the
+	// list stops there.
+	else if (Math.abs(distance) >= TO_THE_END) wheel(rows, -distance);
+	else scrollRowsBy(rows, distance);
+}
+
+// A list: both events go out before the next paint when the list moves at
+// once, so the rows don't jump twice; with smooth scrolling on, it moves on
+// the next frame, so the second waits for it.
+function scrollRowsBy(rows: HTMLElement, distance: number): void {
+	const start = scrollPosition(rows);
+	wheel(rows, -distance);
+	const finish = () => {
+		const moved = scrollPosition(rows) - start;
+		if (moved !== 0 && Math.abs(distance - moved) >= 1) wheel(rows, (-distance * (distance - moved)) / moved);
+	};
+	if (scrollPosition(rows) !== start) finish();
+	else void nextFrame().then(finish);
+}
+
+// The editor scrolls, one after another: a scroll said while the last is
+// still moving waits for it, so each moves its full page from where the
+// last left off. One that failed doesn't hold up the next.
+let editorScrolls = Promise.resolve();
+
+function inTurn(job: () => Promise<void>): Promise<void> {
+	editorScrolls = editorScrolls.catch(() => {}).then(job);
+	return editorScrolls;
+}
+
+async function scrollEditor(rows: HTMLElement, distance: number, lineHeight: number): Promise<void> {
+	const view = linesView(rows);
+	if (Math.abs(distance) < TO_THE_END) await scrollLines(view, distance, lineHeight);
+	else if (!view.gone()) view.wheel(-distance);
+	// Still lines for the next scroll to start from.
+	await view.settled();
+}
+
+/**
+ * The lines of the editor these rows are in, for scrollLines. VS Code
+ * keeps one editor for a split and swaps the file it shows, so the editor
+ * counts as gone when it leaves the page or shows another file.
+ */
+function linesView(rows: HTMLElement): LinesView {
+	const fileOf = () => rows.closest(SELECTORS.editor)?.getAttribute(SELECTORS.editorFileAttribute) ?? null;
+	const file = fileOf();
+	// Before any event, motion still going is a mouse wheel's, smoothed or not.
+	let wheelTime = performance.now();
+	return {
+		settled: () => settledPosition(rows, wheelTime),
+		wheel: (deltaY) => {
+			wheelTime = performance.now();
+			wheel(rows, deltaY);
+		},
+		gone: () => !rows.isConnected || fileOf() !== file,
+	};
+}
+
+// The scroll position once the lines have stopped moving (see
+// linesSettled), after a wheel event sent at this time. Gives up after
+// half a second.
+async function settledPosition(rows: HTMLElement, wheelTime: number): Promise<number> {
+	const deadline = performance.now() + 500;
+	const readings: Reading[] = [{ time: performance.now(), position: scrollPosition(rows) }];
+	while (!linesSettled(readings, wheelTime) && performance.now() < deadline) {
+		await nextFrame();
+		readings.push({ time: performance.now(), position: scrollPosition(rows) });
+	}
+	return readings.at(-1)?.position ?? scrollPosition(rows);
+}
+
+function wheel(rows: HTMLElement, deltaY: number): void {
+	rows.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, view: window, deltaY, deltaMode: 0 }));
+}
+
+// A list moves its rows, and an editor its lines, by setting style.top to
+// minus the scroll position.
+export function scrollPosition(rows: HTMLElement): number {
+	return -parseFloat(rows.style.top || "0");
 }
 
 /**
