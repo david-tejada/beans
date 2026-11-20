@@ -8,6 +8,20 @@ import type { Editor as EditorKind } from "../../src/shared/types";
 import { theiaProgram } from "./theia-program";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
+
+// Chromium stops animation frames and slows timers in a window it thinks
+// can't be seen: covered by other windows, or in the background. Beans
+// relabels on animation frames, so a test window that something covers
+// would stop updating its hints. These switches, which browser automation
+// tools use too, keep the window rendering. MacWebContentsOcclusion is the
+// macOS occlusion check in older Chromium (VS Code 1.90's); later ones
+// don't have it, and an unknown feature name is ignored.
+const KEEP_RENDERING = [
+	"--disable-backgrounding-occluded-windows",
+	"--disable-renderer-backgrounding",
+	"--disable-background-timer-throttling",
+	"--disable-features=MacWebContentsOcclusion",
+];
 const WAIT_MS = 60_000;
 const POLL_MS = 200;
 
@@ -165,6 +179,7 @@ const SETUPS: Record<EditorKind, Setup> = {
 					"--skip-welcome",
 					"--skip-release-notes",
 					"--no-cached-data",
+					...KEEP_RENDERING,
 					// Electron's sandbox doesn't work on the CI runners (microsoft/vscode#84238).
 					...(process.platform === "linux" ? ["--no-sandbox", "--disable-gpu-sandbox"] : []),
 					workspace,
@@ -219,6 +234,7 @@ const SETUPS: Record<EditorKind, Setup> = {
 				args: [
 					workspace,
 					"--remote-debugging-pipe",
+					...KEEP_RENDERING,
 					`--user-data-dir=${path.join(home, "user-data")}`,
 					...(process.platform === "linux" ? ["--no-sandbox", "--disable-gpu-sandbox"] : []),
 				],
