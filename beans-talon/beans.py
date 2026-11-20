@@ -5,6 +5,8 @@ mod = Module()
 # Resize targets that are parts of the window; anything else is a hint.
 PARTS = {"sidebar", "secondary", "panel"}
 
+mod.list("beans_scroll_place", desc="Where upper and downer scroll: an editor split or the sidebar")
+
 # Sent in place of a hint for "this": the selected rows. Beans knows it as
 # SELECTION_HINT. Hints are two letters at most, so it's never one.
 SELECTION_HINT = "this"
