@@ -332,6 +332,11 @@ describe(`Beans in a real ${dom.name}`, () => {
 		if (EDITOR_KIND === "theia") {
 			const header = await editor.waitFor<string>(headerHint("Open Editors"), "the Open Editors header");
 			await editor.evaluate(`window.__beans.setExpanded(${target(header)}, false)`);
+			// Its rows hold letters until it has collapsed, and the Explorer's
+			// rows get other letters once they're gone: a test that read a
+			// hint before then would pick the wrong row with it.
+			await editor.waitFor(`!(${headerExpanded("Open Editors")})`, "Open Editors to collapse");
+			await editor.evaluate("new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))");
 		} else {
 			// Hide Open Editors again: it sits above the files, so its rows
 			// would come first for a test that looks a row up by its name.
