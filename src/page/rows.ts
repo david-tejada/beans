@@ -1,3 +1,4 @@
+import { SELECTION_HINT } from "../requests";
 import type { View } from "../shared/types";
 import { isNumberHint } from "./hints";
 import { EDITOR, HINT_ATTR, SELECTORS, VIEW_NAMES } from "./selectors";
@@ -46,8 +47,15 @@ function rowSelector(): string {
 	return `${SELECTORS.row}, ${SELECTORS.paneHeader}`;
 }
 
-/** The sidebar row or view header with this hint in a container. */
+/**
+ * The sidebar row or view header with this hint in a container. For "this"
+ * (SELECTION_HINT), the first selected row, when it's in the container.
+ */
 export function rowWithHint(container: HTMLElement, hint: string): HTMLElement | null {
+	if (hint === SELECTION_HINT) {
+		const [first] = selectedRows().rows;
+		return first && container.contains(first) ? first : null;
+	}
 	const withHint = `[${HINT_ATTR}="${hint}"]`;
 	return container.querySelector<HTMLElement>(`:is(${SELECTORS.row}, ${SELECTORS.paneHeader})${withHint}`);
 }
@@ -65,8 +73,42 @@ export function sidebarRowWithHint(hint: string): HTMLElement | null {
 export function findRow(hint: string): HTMLElement | null {
 	const containers = isNumberHint(hint) ? [openQuickInput()].filter((c): c is HTMLElement => c !== null) : sidebars();
 	const row = containers.map((container) => rowWithHint(container, hint)).find((r) => r !== null) ?? null;
-	if (!row) console.log(`[beans] no row with hint "${hint}"`);
+	if (!row)
+		console.log(
+			hint === SELECTION_HINT ? "[beans] no selected row is on screen" : `[beans] no row with hint "${hint}"`,
+		);
 	return row;
+}
+
+/**
+ * The selected rows "this" stands for, top to bottom, and the list they're
+ * in: the sidebar list that has keyboard focus; when focus is elsewhere,
+ * such as in the editor, the Explorer; else the first sidebar list that has
+ * a selected row. Only rows on screen with a hint count, since the lists
+ * only render the rows on screen.
+ */
+export function selectedRows(): { list: HTMLElement | null; rows: HTMLElement[] } {
+	const lists = sidebars().flatMap((part) => Array.from(part.querySelectorAll<HTMLElement>(SELECTORS.list)));
+	const selected = visibleRows(sidebars()).filter((row) => hintOf(row) !== "" && row.matches(SELECTORS.selectedRow));
+	const rowsOf = (list: HTMLElement) => selected.filter((row) => row.closest(SELECTORS.list) === list);
+	const focused = focusedList(lists);
+	// A list with focus and nothing selected means nothing, rather than another list's selection.
+	if (focused) return { list: focused, rows: rowsOf(focused) };
+	const explorer = lists.find((list) => list.closest(SELECTORS.views.explorer) && rowsOf(list).length);
+	const list = explorer ?? selected[0]?.closest<HTMLElement>(SELECTORS.list) ?? null;
+	return { list, rows: list ? rowsOf(list) : [] };
+}
+
+// VS Code focuses the list element itself, or an element in a row. Theia
+// focuses the tree around its list, and sometimes the view container
+// around all of its views' trees, which says nothing about which one.
+function focusedList(lists: HTMLElement[]): HTMLElement | null {
+	const active = document.activeElement;
+	if (!active || active === document.body) return null;
+	const holding = lists.filter((list) => list.contains(active));
+	if (holding.length) return holding.at(-1)!;
+	const inside = lists.filter((list) => active.contains(list));
+	return inside.length === 1 ? inside[0]! : null;
 }
 
 /**

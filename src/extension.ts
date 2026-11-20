@@ -14,6 +14,7 @@ import {
 	scrollChannelText,
 	scrollDirectionFrom,
 	scrollPlaceFrom,
+	SELECTION_HINT,
 } from "./requests";
 import { toHintSpacing } from "./hint-spacing";
 import type { PageSettings, ResizeRequest } from "./shared/types";
@@ -168,7 +169,7 @@ async function rowPoint(letters: unknown): Promise<{ x: number; y: number } | nu
 		await reportError(error);
 		return null;
 	}
-	if (!point) vscode.window.showWarningMessage(`Beans: no row with hint ${hint.toUpperCase()}.`);
+	if (!point) warn(hint === SELECTION_HINT ? "no selected row is on screen" : `no row with hint ${hint.toUpperCase()}`);
 	return point ?? null;
 }
 

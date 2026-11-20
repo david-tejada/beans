@@ -88,6 +88,12 @@ describe("targetFrom", () => {
 		});
 	});
 
+	test('keeps "this", on its own and as a range\'s end', () => {
+		expect(targetFrom({ items: [{ hint: "this" }, { from: "this", to: "d" }] })).toEqual({
+			items: [{ hint: "this" }, { from: "this", to: "d" }],
+		});
+	});
+
 	test("drops items that aren't hints or ranges", () => {
 		expect(targetFrom({ items: [{ hint: "a" }, { from: "b" }, 3] })).toEqual({ items: [{ hint: "a" }] });
 	});
@@ -105,6 +111,10 @@ describe("resizeRequestFrom", () => {
 		expect(resizeRequestFrom({ target: "sidebar", by: 2 })).toEqual({ target: "sidebar", by: 2 });
 		expect(resizeRequestFrom({ target: { hint: "a" }, to: 300 })).toEqual({ target: { hint: "a" }, to: 300 });
 		expect(resizeRequestFrom({ target: "panel", max: true })).toEqual({ target: "panel", max: true });
+	});
+
+	test('accepts "this" as the hint', () => {
+		expect(resizeRequestFrom({ target: { hint: "this" }, by: -1 })).toEqual({ target: { hint: "this" }, by: -1 });
 	});
 
 	test("leaves out amounts of the wrong type", () => {
